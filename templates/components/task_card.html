@@ -1,0 +1,291 @@
+<div class="task-card" data-task-id="{{ task.id }}" draggable="true" onclick="viewTask('{{ task.id }}')">
+    <div class="task-card-header">
+        <div class="task-priority priority-{{ task.priority|lower }}"></div>
+        <button class="task-menu-btn" onclick="openTaskMenu(event, '{{ task.id }}')">
+            <svg width="16" height="16" fill="none" stroke="currentColor" stroke-width="2">
+                <circle cx="12" cy="5" r="1"/>
+                <circle cx="12" cy="12" r="1"/>
+                <circle cx="12" cy="19" r="1"/>
+            </svg>
+        </button>
+    </div>
+    
+    <div class="task-card-body">
+        <h4 class="task-title">{{ task.title }}</h4>
+        
+        {% if task.description %}
+        <p class="task-description">{{ task.description|truncatewords:12 }}</p>
+        {% endif %}
+        
+        {% if task.labels.exists %}
+        <div class="task-labels">
+            {% for label in task.labels.all|slice:":3" %}
+            <span class="task-label" style="background: {{ label.color }}20; color: {{ label.color }};">
+                {{ label.name }}
+            </span>
+            {% endfor %}
+        </div>
+        {% endif %}
+    </div>
+    
+    <div class="task-card-footer">
+        <div class="task-meta">
+            {% if task.due_date %}
+            <span class="task-due {% if task.is_overdue %}overdue{% endif %}">
+                <svg width="14" height="14" fill="none" stroke="currentColor" stroke-width="2">
+                    <circle cx="7" cy="7" r="6"/>
+                    <path d="M7 3v4l3 2"/>
+                </svg>
+                {{ task.due_date|date:"M d" }}
+            </span>
+            {% endif %}
+            
+            {% if task.comments_count > 0 %}
+            <span class="task-comments">
+                <svg width="14" height="14" fill="none" stroke="currentColor" stroke-width="2">
+                    <path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"/>
+                </svg>
+                {{ task.comments_count }}
+            </span>
+            {% endif %}
+            
+            {% if task.attachments_count > 0 %}
+            <span class="task-attachments">
+                <svg width="14" height="14" fill="none" stroke="currentColor" stroke-width="2">
+                    <path d="M21.44 11.05l-9.19 9.19a6 6 0 0 1-8.49-8.49l9.19-9.19a4 4 0 0 1 5.66 5.66l-9.2 9.19a2 2 0 0 1-2.83-2.83l8.49-8.48"/>
+                </svg>
+                {{ task.attachments_count }}
+            </span>
+            {% endif %}
+        </div>
+        
+        {% if task.assigned_to %}
+        <div class="task-assignee">
+            <div class="avatar-sm" title="{{ task.assigned_to.get_full_name }}">
+                {{ task.assigned_to.get_initials }}
+            </div>
+        </div>
+        {% endif %}
+    </div>
+</div>
+
+<style>
+.task-card {
+    background: var(--card-bg);
+    border: 1px solid var(--border-color);
+    border-radius: 8px;
+    padding: 1rem;
+    cursor: pointer;
+    transition: all 0.2s;
+}
+
+.task-card:hover {
+    border-color: var(--primary-color);
+    box-shadow: 0 2px 8px rgba(0, 0, 0, 0.1);
+    transform: translateY(-2px);
+}
+
+.task-card[draggable="true"] {
+    cursor: move;
+}
+
+.task-card-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    margin-bottom: 0.75rem;
+}
+
+.task-priority {
+    width: 24px;
+    height: 4px;
+    border-radius: 2px;
+}
+
+.task-priority.priority-high {
+    background: var(--error-color);
+}
+
+.task-priority.priority-medium {
+    background: var(--warning-color);
+}
+
+.task-priority.priority-low {
+    background: var(--success-color);
+}
+
+.task-menu-btn {
+    background: none;
+    border: none;
+    color: var(--text-muted);
+    padding: 0.25rem;
+    cursor: pointer;
+    border-radius: 4px;
+    opacity: 0;
+    transition: all 0.2s;
+}
+
+.task-card:hover .task-menu-btn {
+    opacity: 1;
+}
+
+.task-menu-btn:hover {
+    background: var(--hover-bg);
+    color: var(--text-primary);
+}
+
+.task-card-body {
+    margin-bottom: 0.75rem;
+}
+
+.task-title {
+    font-size: 0.95rem;
+    font-weight: 500;
+    color: var(--text-primary);
+    margin-bottom: 0.5rem;
+    line-height: 1.4;
+}
+
+.task-description {
+    font-size: 0.875rem;
+    color: var(--text-secondary);
+    line-height: 1.5;
+    margin-bottom: 0.75rem;
+}
+
+.task-labels {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 0.375rem;
+}
+
+.task-label {
+    padding: 0.25rem 0.5rem;
+    border-radius: 4px;
+    font-size: 0.75rem;
+    font-weight: 500;
+}
+
+.task-card-footer {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    padding-top: 0.75rem;
+    border-top: 1px solid var(--border-color);
+}
+
+.task-meta {
+    display: flex;
+    align-items: center;
+    gap: 0.75rem;
+    font-size: 0.75rem;
+    color: var(--text-secondary);
+}
+
+.task-meta > span {
+    display: flex;
+    align-items: center;
+    gap: 0.25rem;
+}
+
+.task-due.overdue {
+    color: var(--error-color);
+}
+
+.task-assignee .avatar-sm {
+    width: 28px;
+    height: 28px;
+    font-size: 0.75rem;
+}
+</style>
+
+<script>
+function openTaskMenu(event, taskId) {
+    event.stopPropagation();
+    // Implement context menu
+    console.log('Task menu:', taskId);
+}
+
+function viewTask(taskId) {
+    window.location.href = `/tasks/${taskId}/`;
+}
+
+// Drag and drop functionality
+document.addEventListener('DOMContentLoaded', function() {
+    const taskCards = document.querySelectorAll('.task-card[draggable="true"]');
+    const columns = document.querySelectorAll('.column-body');
+    
+    taskCards.forEach(card => {
+        card.addEventListener('dragstart', handleDragStart);
+        card.addEventListener('dragend', handleDragEnd);
+    });
+    
+    columns.forEach(column => {
+        column.addEventListener('dragover', handleDragOver);
+        column.addEventListener('drop', handleDrop);
+        column.addEventListener('dragleave', handleDragLeave);
+    });
+});
+
+let draggedElement = null;
+
+function handleDragStart(e) {
+    draggedElement = this;
+    this.style.opacity = '0.5';
+    e.dataTransfer.effectAllowed = 'move';
+    e.dataTransfer.setData('text/html', this.innerHTML);
+}
+
+function handleDragEnd(e) {
+    this.style.opacity = '1';
+    document.querySelectorAll('.column-body').forEach(col => {
+        col.classList.remove('drag-over');
+    });
+}
+
+function handleDragOver(e) {
+    if (e.preventDefault) {
+        e.preventDefault();
+    }
+    e.dataTransfer.dropEffect = 'move';
+    this.classList.add('drag-over');
+    return false;
+}
+
+function handleDragLeave(e) {
+    this.classList.remove('drag-over');
+}
+
+async function handleDrop(e) {
+    if (e.stopPropagation) {
+        e.stopPropagation();
+    }
+    
+    this.classList.remove('drag-over');
+    
+    if (draggedElement !== this) {
+        const column = this.closest('.board-column');
+        const newStatus = column.dataset.status;
+        const taskId = draggedElement.dataset.taskId;
+        
+        // Move the element
+        this.appendChild(draggedElement);
+        
+        // Update status via API
+        try {
+            await window.SaaSPlatform.apiRequest(`/api/tasks/${taskId}/`, {
+                method: 'PATCH',
+                body: JSON.stringify({ status: newStatus })
+            });
+            
+            window.SaaSPlatform.showToast('Task status updated', 'success');
+        } catch (error) {
+            window.SaaSPlatform.showToast('Failed to update task', 'error');
+            // Revert the move
+            location.reload();
+        }
+    }
+    
+    return false;
+}
+</script>
