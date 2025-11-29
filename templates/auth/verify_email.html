@@ -1,0 +1,248 @@
+{% extends "base.html" %}
+{% load static %}
+
+{% block title %}Verify Email - {{ block.super }}{% endblock %}
+
+{% block body_class %}auth-page{% endblock %}
+
+{% block content %}
+<div class="auth-container">
+    <div class="auth-card">
+        <div class="auth-header">
+            <div class="verification-icon">
+                <svg width="64" height="64" fill="none" stroke="var(--primary-color)" stroke-width="2">
+                    <circle cx="32" cy="32" r="30"/>
+                    <path d="M16 32l10 10 20-20"/>
+                </svg>
+            </div>
+            <h1 class="auth-title">Verify Your Email</h1>
+            <p class="auth-subtitle">We've sent a verification link to your email address</p>
+        </div>
+
+        <div class="auth-body">
+            <div class="verification-content">
+                <div class="info-box">
+                    <svg width="20" height="20" fill="none" stroke="currentColor" stroke-width="2">
+                        <circle cx="10" cy="10" r="9"/>
+                        <path d="M10 6v4M10 14h.01"/>
+                    </svg>
+                    <p>Check your inbox at <strong id="userEmail">{{ email }}</strong> and click the verification link to activate your account.</p>
+                </div>
+
+                <div class="verification-steps">
+                    <h3>Next Steps:</h3>
+                    <ol>
+                        <li>Check your email inbox (and spam folder)</li>
+                        <li>Click the verification link in the email</li>
+                        <li>Your account will be activated automatically</li>
+                        <li>Sign in and start using the platform</li>
+                    </ol>
+                </div>
+
+                <div class="resend-section">
+                    <p>Didn't receive the email?</p>
+                    <button type="button" class="btn btn-outline" id="resendButton">
+                        <span class="btn-text">Resend Verification Email</span>
+                        <span class="btn-loader" style="display: none;">
+                            <span class="spinner"></span>
+                        </span>
+                    </button>
+                    <p class="resend-timer" id="resendTimer" style="display: none;">
+                        You can resend in <span id="countdown">60</span> seconds
+                    </p>
+                </div>
+            </div>
+        </div>
+
+        <div class="auth-footer">
+            <p>Need help? <a href="/support/" class="auth-link">Contact Support</a></p>
+        </div>
+    </div>
+</div>
+
+<style>
+.verification-icon {
+    display: inline-flex;
+    margin-bottom: 1.5rem;
+    animation: scaleIn 0.5s ease-out;
+}
+
+@keyframes scaleIn {
+    from {
+        transform: scale(0);
+        opacity: 0;
+    }
+    to {
+        transform: scale(1);
+        opacity: 1;
+    }
+}
+
+.verification-content {
+    text-align: center;
+}
+
+.info-box {
+    display: flex;
+    gap: 1rem;
+    padding: 1rem;
+    background: rgba(var(--primary-rgb), 0.1);
+    border: 1px solid rgba(var(--primary-rgb), 0.2);
+    border-radius: 8px;
+    margin-bottom: 2rem;
+    text-align: left;
+}
+
+.info-box svg {
+    flex-shrink: 0;
+    color: var(--primary-color);
+    margin-top: 0.25rem;
+}
+
+.info-box p {
+    color: var(--text-secondary);
+    font-size: 0.95rem;
+    line-height: 1.6;
+}
+
+.info-box strong {
+    color: var(--text-primary);
+}
+
+.verification-steps {
+    text-align: left;
+    margin-bottom: 2rem;
+}
+
+.verification-steps h3 {
+    font-size: 1rem;
+    font-weight: 600;
+    color: var(--text-primary);
+    margin-bottom: 1rem;
+}
+
+.verification-steps ol {
+    padding-left: 1.5rem;
+    color: var(--text-secondary);
+}
+
+.verification-steps li {
+    margin-bottom: 0.75rem;
+    line-height: 1.6;
+}
+
+.resend-section {
+    padding: 1.5rem 0;
+}
+
+.resend-section > p {
+    color: var(--text-secondary);
+    font-size: 0.95rem;
+    margin-bottom: 1rem;
+}
+
+.resend-timer {
+    margin-top: 1rem;
+    color: var(--text-muted);
+    font-size: 0.875rem;
+}
+
+.resend-timer span {
+    font-weight: 600;
+    color: var(--text-primary);
+}
+
+.btn-outline {
+    border: 1px solid var(--primary-color);
+    background: transparent;
+    color: var(--primary-color);
+}
+
+.btn-outline:hover {
+    background: var(--primary-color);
+    color: white;
+}
+</style>
+
+<script>
+document.addEventListener('DOMContentLoaded', function() {
+    const resendButton = document.getElementById('resendButton');
+    const resendTimer = document.getElementById('resendTimer');
+    const countdownElement = document.getElementById('countdown');
+    let canResend = true;
+    let countdown = 60;
+    
+    resendButton.addEventListener('click', async function() {
+        if (!canResend) return;
+        
+        const email = document.getElementById('userEmail').textContent;
+        
+        // Show loading
+        resendButton.disabled = true;
+        resendButton.querySelector('.btn-text').style.display = 'none';
+        resendButton.querySelector('.btn-loader').style.display = 'inline-flex';
+        
+        try {
+            const response = await fetch('/api/auth/resend-verification/', {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json',
+                    'X-CSRFToken': getCookie('csrftoken')
+                },
+                body: JSON.stringify({ email })
+            });
+            
+            const result = await response.json();
+            
+            if (response.ok) {
+                window.SaaSPlatform.showToast('Verification email sent!', 'success');
+                startCountdown();
+            } else {
+                window.SaaSPlatform.showToast(result.message || 'Failed to send email', 'error');
+            }
+        } catch (error) {
+            console.error('Resend error:', error);
+            window.SaaSPlatform.showToast('An error occurred. Please try again.', 'error');
+        } finally {
+            resendButton.disabled = false;
+            resendButton.querySelector('.btn-text').style.display = 'inline';
+            resendButton.querySelector('.btn-loader').style.display = 'none';
+        }
+    });
+    
+    function startCountdown() {
+        canResend = false;
+        resendButton.style.display = 'none';
+        resendTimer.style.display = 'block';
+        countdown = 60;
+        
+        const interval = setInterval(() => {
+            countdown--;
+            countdownElement.textContent = countdown;
+            
+            if (countdown <= 0) {
+                clearInterval(interval);
+                canResend = true;
+                resendButton.style.display = 'inline-flex';
+                resendTimer.style.display = 'none';
+            }
+        }, 1000);
+    }
+    
+    function getCookie(name) {
+        let cookieValue = null;
+        if (document.cookie && document.cookie !== '') {
+            const cookies = document.cookie.split(';');
+            for (let i = 0; i < cookies.length; i++) {
+                const cookie = cookies[i].trim();
+                if (cookie.substring(0, name.length + 1) === (name + '=')) {
+                    cookieValue = decodeURIComponent(cookie.substring(name.length + 1));
+                    break;
+                }
+            }
+        }
+        return cookieValue;
+    }
+});
+</script>
+{% endblock %}

@@ -1,0 +1,576 @@
+{% extends "layouts/app.html" %}
+{% load static %}
+
+{% block title %}Dashboard - {{ block.super }}{% endblock %}
+
+{% block content %}
+<div class="dashboard-header">
+    <div>
+        <h1 class="page-title">Dashboard</h1>
+        <p class="page-subtitle">Welcome back, {{ user.get_full_name }}!</p>
+    </div>
+    <div class="header-actions">
+        <button class="btn btn-primary" onclick="openModal('createTaskModal')">
+            <svg width="16" height="16" fill="none" stroke="currentColor" stroke-width="2">
+                <path d="M12 5v14M5 12h14"/>
+            </svg>
+            New Task
+        </button>
+    </div>
+</div>
+
+<!-- Subscription Alert -->
+{% if subscription.is_trial %}
+<div class="alert alert-info">
+    <svg width="20" height="20" fill="none" stroke="currentColor" stroke-width="2">
+        <circle cx="10" cy="10" r="9"/>
+        <path d="M10 6v4M10 14h.01"/>
+    </svg>
+    <div>
+        <strong>Trial Period</strong>
+        <p>You have {{ subscription.trial_days_remaining }} days left in your trial. <a href="{% url 'billing' %}">Upgrade now</a></p>
+    </div>
+</div>
+{% endif %}
+
+<!-- Stats Overview -->
+<div class="stats-grid">
+    <div class="stat-card">
+        <div class="stat-icon" style="background: rgba(37, 99, 235, 0.1);">
+            <svg width="24" height="24" fill="none" stroke="rgb(37, 99, 235)" stroke-width="2">
+                <rect x="3" y="3" width="18" height="18" rx="2"/>
+                <path d="M9 3v18M15 3v18M3 9h18M3 15h18"/>
+            </svg>
+        </div>
+        <div class="stat-content">
+            <div class="stat-label">Total Tasks</div>
+            <div class="stat-value">{{ stats.total_tasks }}</div>
+            <div class="stat-change">
+                {{ stats.tasks_this_week }} created this week
+            </div>
+        </div>
+    </div>
+
+    <div class="stat-card">
+        <div class="stat-icon" style="background: rgba(245, 158, 11, 0.1);">
+            <svg width="24" height="24" fill="none" stroke="rgb(245, 158, 11)" stroke-width="2">
+                <circle cx="12" cy="12" r="10"/>
+                <path d="M12 6v6l4 2"/>
+            </svg>
+        </div>
+        <div class="stat-content">
+            <div class="stat-label">In Progress</div>
+            <div class="stat-value">{{ stats.in_progress_tasks }}</div>
+            <div class="stat-change">
+                {{ stats.in_progress_percentage }}% of active tasks
+            </div>
+        </div>
+    </div>
+
+    <div class="stat-card">
+        <div class="stat-icon" style="background: rgba(16, 185, 129, 0.1);">
+            <svg width="24" height="24" fill="none" stroke="rgb(16, 185, 129)" stroke-width="2">
+                <circle cx="12" cy="12" r="10"/>
+                <path d="M9 12l2 2 4-4"/>
+            </svg>
+        </div>
+        <div class="stat-content">
+            <div class="stat-label">Completed</div>
+            <div class="stat-value">{{ stats.completed_tasks }}</div>
+            <div class="stat-change">
+                {{ stats.completion_rate }}% completion rate
+            </div>
+        </div>
+    </div>
+
+    <div class="stat-card">
+        <div class="stat-icon" style="background: rgba(239, 68, 68, 0.1);">
+            <svg width="24" height="24" fill="none" stroke="rgb(239, 68, 68)" stroke-width="2">
+                <circle cx="12" cy="12" r="10"/>
+                <path d="M12 8v4M12 16h.01"/>
+            </svg>
+        </div>
+        <div class="stat-content">
+            <div class="stat-label">Overdue</div>
+            <div class="stat-value">{{ stats.overdue_tasks }}</div>
+            <div class="stat-change">
+                {% if stats.overdue_tasks > 0 %}
+                    <a href="{% url 'tasks' %}?filter=overdue" class="action-link">View tasks</a>
+                {% else %}
+                    All on track!
+                {% endif %}
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- Main Content -->
+<div class="dashboard-grid">
+    <!-- My Tasks -->
+    <div class="dashboard-card">
+        <div class="card-header">
+            <h2 class="card-title">My Tasks</h2>
+            <div class="card-tabs">
+                <button class="tab-btn active" data-tab="assigned">Assigned to me</button>
+                <button class="tab-btn" data-tab="created">Created by me</button>
+            </div>
+        </div>
+        <div class="tasks-list" id="assignedTasks">
+            {% for task in my_tasks %}
+            <div class="task-item" onclick="viewTask('{{ task.id }}')">
+                <div class="task-checkbox">
+                    <input type="checkbox" {% if task.status == 'COMPLETED' %}checked{% endif %} onclick="toggleTaskStatus(event, '{{ task.id }}')">
+                </div>
+                <div class="task-content">
+                    <div class="task-title">{{ task.title }}</div>
+                    <div class="task-meta">
+                        <span class="task-team">{{ task.team.name }}</span>
+                        <span>•</span>
+                        {% if task.due_date %}
+                        <span class="task-due {% if task.is_overdue %}overdue{% endif %}">
+                            Due {{ task.due_date|date:"M d" }}
+                        </span>
+                        {% endif %}
+                        <span>•</span>
+                        <span class="badge badge-{{ task.priority|lower }}">{{ task.priority }}</span>
+                    </div>
+                </div>
+                <div class="task-assignee">
+                    {% if task.assigned_to %}
+                    <div class="avatar" title="{{ task.assigned_to.get_full_name }}">
+                        {{ task.assigned_to.get_initials }}
+                    </div>
+                    {% endif %}
+                </div>
+            </div>
+            {% empty %}
+            <div class="empty-state">
+                <svg width="48" height="48" fill="none" stroke="var(--text-muted)" stroke-width="2">
+                    <rect x="3" y="3" width="18" height="18" rx="2"/>
+                    <path d="M9 3v18M15 3v18M3 9h18M3 15h18"/>
+                </svg>
+                <p>No tasks assigned to you</p>
+                <button class="btn btn-sm btn-primary" onclick="openModal('createTaskModal')">Create Task</button>
+            </div>
+            {% endfor %}
+        </div>
+    </div>
+
+    <!-- Upcoming Deadlines -->
+    <div class="dashboard-card">
+        <div class="card-header">
+            <h2 class="card-title">Upcoming Deadlines</h2>
+            <a href="{% url 'tasks' %}" class="btn btn-sm btn-secondary">View All</a>
+        </div>
+        <div class="deadline-list">
+            {% for task in upcoming_deadlines %}
+            <div class="deadline-item" onclick="viewTask('{{ task.id }}')">
+                <div class="deadline-date">
+                    <div class="date-day">{{ task.due_date|date:"d" }}</div>
+                    <div class="date-month">{{ task.due_date|date:"M" }}</div>
+                </div>
+                <div class="deadline-content">
+                    <div class="deadline-title">{{ task.title }}</div>
+                    <div class="deadline-team">{{ task.team.name }}</div>
+                </div>
+                <span class="badge badge-{{ task.priority|lower }}">{{ task.priority }}</span>
+            </div>
+            {% empty %}
+            <div class="empty-state">No upcoming deadlines</div>
+            {% endfor %}
+        </div>
+    </div>
+</div>
+
+<!-- Teams and Activity -->
+<div class="dashboard-grid">
+    <!-- My Teams -->
+    <div class="dashboard-card">
+        <div class="card-header">
+            <h2 class="card-title">My Teams</h2>
+            <a href="{% url 'teams' %}" class="btn btn-sm btn-secondary">View All</a>
+        </div>
+        <div class="teams-grid">
+            {% for team in my_teams %}
+            <div class="team-card" onclick="viewTeam('{{ team.id }}')">
+                <div class="team-header">
+                    <div class="team-avatar">{{ team.name|slice:":1" }}</div>
+                    <div class="team-members-count">{{ team.members_count }} members</div>
+                </div>
+                <div class="team-name">{{ team.name }}</div>
+                <div class="team-stats">
+                    <div class="team-stat">
+                        <span class="stat-value">{{ team.tasks_count }}</span>
+                        <span class="stat-label">Tasks</span>
+                    </div>
+                    <div class="team-stat">
+                        <span class="stat-value">{{ team.active_tasks_count }}</span>
+                        <span class="stat-label">Active</span>
+                    </div>
+                </div>
+            </div>
+            {% empty %}
+            <div class="empty-state">
+                <p>You're not part of any team yet</p>
+                <a href="{% url 'teams' %}" class="btn btn-sm btn-primary">Browse Teams</a>
+            </div>
+            {% endfor %}
+        </div>
+    </div>
+
+    <!-- Recent Activity -->
+    <div class="dashboard-card">
+        <div class="card-header">
+            <h2 class="card-title">Recent Activity</h2>
+        </div>
+        <div class="activity-list">
+            {% for activity in recent_activities %}
+            <div class="activity-item">
+                <div class="activity-avatar">
+                    {{ activity.user.get_initials }}
+                </div>
+                <div class="activity-content">
+                    <div class="activity-text">
+                        <strong>{{ activity.user.get_full_name }}</strong>
+                        {{ activity.action }}
+                    </div>
+                    <div class="activity-time">{{ activity.created_at|timesince }} ago</div>
+                </div>
+            </div>
+            {% empty %}
+            <div class="empty-state">No recent activity</div>
+            {% endfor %}
+        </div>
+    </div>
+</div>
+
+<!-- Quick Stats Chart -->
+<div class="dashboard-card">
+    <div class="card-header">
+        <h2 class="card-title">Task Completion Trend</h2>
+        <select class="form-select-sm" id="trendPeriod">
+            <option value="7">Last 7 days</option>
+            <option value="30" selected>Last 30 days</option>
+            <option value="90">Last 90 days</option>
+        </select>
+    </div>
+    <div class="chart-container">
+        <canvas id="taskCompletionChart"></canvas>
+    </div>
+</div>
+
+<style>
+.alert {
+    display: flex;
+    gap: 1rem;
+    padding: 1rem 1.5rem;
+    border-radius: 8px;
+    margin-bottom: 2rem;
+    border: 1px solid;
+}
+
+.alert-info {
+    background: rgba(37, 99, 235, 0.1);
+    border-color: rgba(37, 99, 235, 0.2);
+    color: rgb(37, 99, 235);
+}
+
+.alert svg {
+    flex-shrink: 0;
+}
+
+.alert strong {
+    display: block;
+    margin-bottom: 0.25rem;
+}
+
+.alert p {
+    margin: 0;
+}
+
+.alert a {
+    color: inherit;
+    text-decoration: underline;
+    font-weight: 600;
+}
+
+.card-tabs {
+    display: flex;
+    gap: 0.5rem;
+}
+
+.tab-btn {
+    padding: 0.5rem 1rem;
+    border: none;
+    background: transparent;
+    color: var(--text-secondary);
+    font-size: 0.875rem;
+    font-weight: 500;
+    cursor: pointer;
+    border-radius: 6px;
+    transition: all 0.2s;
+}
+
+.tab-btn:hover {
+    background: var(--hover-bg);
+}
+
+.tab-btn.active {
+    background: var(--primary-color);
+    color: white;
+}
+
+.tasks-list {
+    padding: 1rem;
+}
+
+.task-item {
+    display: flex;
+    align-items: center;
+    gap: 1rem;
+    padding: 1rem;
+    border: 1px solid var(--border-color);
+    border-radius: 8px;
+    margin-bottom: 0.75rem;
+    cursor: pointer;
+    transition: all 0.2s;
+}
+
+.task-item:hover {
+    background: var(--hover-bg);
+    border-color: var(--primary-color);
+}
+
+.task-checkbox input {
+    width: 18px;
+    height: 18px;
+    cursor: pointer;
+}
+
+.task-content {
+    flex: 1;
+}
+
+.task-title {
+    font-weight: 500;
+    color: var(--text-primary);
+    margin-bottom: 0.25rem;
+}
+
+.task-meta {
+    display: flex;
+    gap: 0.5rem;
+    align-items: center;
+    font-size: 0.875rem;
+    color: var(--text-secondary);
+}
+
+.task-team {
+    font-weight: 500;
+}
+
+.task-due.overdue {
+    color: var(--error-color);
+    font-weight: 500;
+}
+
+.deadline-list {
+    padding: 1rem;
+}
+
+.deadline-item {
+    display: flex;
+    align-items: center;
+    gap: 1rem;
+    padding: 1rem;
+    border: 1px solid var(--border-color);
+    border-radius: 8px;
+    margin-bottom: 0.75rem;
+    cursor: pointer;
+    transition: all 0.2s;
+}
+
+.deadline-item:hover {
+    background: var(--hover-bg);
+}
+
+.deadline-date {
+    width: 48px;
+    text-align: center;
+    flex-shrink: 0;
+}
+
+.date-day {
+    font-size: 1.5rem;
+    font-weight: 700;
+    color: var(--text-primary);
+    line-height: 1;
+}
+
+.date-month {
+    font-size: 0.875rem;
+    color: var(--text-secondary);
+    text-transform: uppercase;
+}
+
+.deadline-content {
+    flex: 1;
+}
+
+.deadline-title {
+    font-weight: 500;
+    color: var(--text-primary);
+    margin-bottom: 0.25rem;
+}
+
+.deadline-team {
+    font-size: 0.875rem;
+    color: var(--text-secondary);
+}
+
+.teams-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fill, minmax(200px, 1fr));
+    gap: 1rem;
+    padding: 1rem;
+}
+
+.team-card {
+    padding: 1.5rem;
+    border: 1px solid var(--border-color);
+    border-radius: 8px;
+    cursor: pointer;
+    transition: all 0.2s;
+}
+
+.team-card:hover {
+    border-color: var(--primary-color);
+    box-shadow: 0 4px 12px rgba(0, 0, 0, 0.1);
+}
+
+.team-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    margin-bottom: 1rem;
+}
+
+.team-avatar {
+    width: 40px;
+    height: 40px;
+    border-radius: 8px;
+    background: var(--primary-color);
+    color: white;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-weight: 600;
+    text-transform: uppercase;
+}
+
+.team-members-count {
+    font-size: 0.75rem;
+    color: var(--text-secondary);
+}
+
+.team-name {
+    font-weight: 600;
+    color: var(--text-primary);
+    margin-bottom: 1rem;
+}
+
+.team-stats {
+    display: flex;
+    gap: 1.5rem;
+}
+
+.team-stat {
+    display: flex;
+    flex-direction: column;
+}
+
+.team-stat .stat-value {
+    font-size: 1.25rem;
+    font-weight: 700;
+    color: var(--text-primary);
+}
+
+.team-stat .stat-label {
+    font-size: 0.75rem;
+    color: var(--text-secondary);
+}
+
+.activity-avatar {
+    width: 36px;
+    height: 36px;
+    border-radius: 50%;
+    background: var(--primary-color);
+    color: white;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 0.875rem;
+    font-weight: 600;
+    flex-shrink: 0;
+}
+
+.activity-time {
+    font-size: 0.875rem;
+    color: var(--text-secondary);
+}
+
+.badge-high {
+    background: rgba(239, 68, 68, 0.1);
+    color: rgb(239, 68, 68);
+}
+
+.badge-medium {
+    background: rgba(245, 158, 11, 0.1);
+    color: rgb(245, 158, 11);
+}
+
+.badge-low {
+    background: rgba(16, 185, 129, 0.1);
+    color: rgb(16, 185, 129);
+}
+</style>
+
+<script>
+function viewTask(taskId) {
+    window.location.href = `/tasks/${taskId}/`;
+}
+
+function viewTeam(teamId) {
+    window.location.href = `/teams/${teamId}/`;
+}
+
+async function toggleTaskStatus(event, taskId) {
+    event.stopPropagation();
+    const checkbox = event.target;
+    const status = checkbox.checked ? 'COMPLETED' : 'IN_PROGRESS';
+    
+    try {
+        await window.SaaSPlatform.apiRequest(`/api/tasks/${taskId}/`, {
+            method: 'PATCH',
+            body: JSON.stringify({ status })
+        });
+        
+        window.SaaSPlatform.showToast('Task status updated', 'success');
+    } catch (error) {
+        checkbox.checked = !checkbox.checked;
+        window.SaaSPlatform.showToast('Failed to update task', 'error');
+    }
+}
+
+// Tab switching
+document.querySelectorAll('.tab-btn').forEach(btn => {
+    btn.addEventListener('click', function() {
+        document.querySelectorAll('.tab-btn').forEach(b => b.classList.remove('active'));
+        this.classList.add('active');
+        
+        const tab = this.dataset.tab;
+        // Load tasks based on tab - implement based on your needs
+    });
+});
+</script>
+{% endblock %}

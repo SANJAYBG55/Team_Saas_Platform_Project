@@ -1,0 +1,579 @@
+{% extends "layouts/app.html" %}
+{% load static %}
+
+{% block title %}Admin Dashboard - {{ block.super }}{% endblock %}
+
+{% block content %}
+<div class="dashboard-header">
+    <div>
+        <h1 class="page-title">Admin Dashboard</h1>
+        <p class="page-subtitle">System overview and tenant management</p>
+    </div>
+    <div class="header-actions">
+        <button class="btn btn-secondary" onclick="window.location.reload()">
+            <svg width="16" height="16" fill="none" stroke="currentColor" stroke-width="2">
+                <path d="M1 4v6h6M15 12V6h-6"/>
+                <path d="M1.7 10.5a8 8 0 0 1 12.6-6.5M14.3 5.5a8 8 0 0 1-12.6 6.5"/>
+            </svg>
+            Refresh
+        </button>
+    </div>
+</div>
+
+<!-- Stats Cards -->
+<div class="stats-grid">
+    <div class="stat-card">
+        <div class="stat-icon" style="background: rgba(37, 99, 235, 0.1);">
+            <svg width="24" height="24" fill="none" stroke="rgb(37, 99, 235)" stroke-width="2">
+                <path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"/>
+                <circle cx="9" cy="7" r="4"/>
+                <path d="M23 21v-2a4 4 0 0 0-3-3.87M16 3.13a4 4 0 0 1 0 7.75"/>
+            </svg>
+        </div>
+        <div class="stat-content">
+            <div class="stat-label">Total Tenants</div>
+            <div class="stat-value" id="totalTenants">{{ stats.total_tenants }}</div>
+            <div class="stat-change positive">
+                <svg width="16" height="16" fill="none" stroke="currentColor" stroke-width="2">
+                    <path d="M8 2v12M2 8l6-6 6 6"/>
+                </svg>
+                +{{ stats.tenants_growth }}% from last month
+            </div>
+        </div>
+    </div>
+
+    <div class="stat-card">
+        <div class="stat-icon" style="background: rgba(16, 185, 129, 0.1);">
+            <svg width="24" height="24" fill="none" stroke="rgb(16, 185, 129)" stroke-width="2">
+                <circle cx="12" cy="12" r="10"/>
+                <path d="M9 12l2 2 4-4"/>
+            </svg>
+        </div>
+        <div class="stat-content">
+            <div class="stat-label">Active Tenants</div>
+            <div class="stat-value" id="activeTenants">{{ stats.active_tenants }}</div>
+            <div class="stat-change">
+                {{ stats.active_percentage }}% of total
+            </div>
+        </div>
+    </div>
+
+    <div class="stat-card">
+        <div class="stat-icon" style="background: rgba(245, 158, 11, 0.1);">
+            <svg width="24" height="24" fill="none" stroke="rgb(245, 158, 11)" stroke-width="2">
+                <circle cx="12" cy="12" r="10"/>
+                <path d="M12 6v6l4 2"/>
+            </svg>
+        </div>
+        <div class="stat-content">
+            <div class="stat-label">Pending Approval</div>
+            <div class="stat-value" id="pendingTenants">{{ stats.pending_tenants }}</div>
+            <div class="stat-change">
+                {% if stats.pending_tenants > 0 %}
+                    <a href="{% url 'admin_tenants' %}?status=pending" class="action-link">Review now</a>
+                {% else %}
+                    All caught up!
+                {% endif %}
+            </div>
+        </div>
+    </div>
+
+    <div class="stat-card">
+        <div class="stat-icon" style="background: rgba(139, 92, 246, 0.1);">
+            <svg width="24" height="24" fill="none" stroke="rgb(139, 92, 246)" stroke-width="2">
+                <rect x="2" y="7" width="20" height="14" rx="2"/>
+                <path d="M16 21V5a2 2 0 0 0-2-2h-4a2 2 0 0 0-2 2v16"/>
+            </svg>
+        </div>
+        <div class="stat-content">
+            <div class="stat-label">Revenue (MTD)</div>
+            <div class="stat-value" id="revenue">${{ stats.revenue|floatformat:0 }}</div>
+            <div class="stat-change positive">
+                <svg width="16" height="16" fill="none" stroke="currentColor" stroke-width="2">
+                    <path d="M8 2v12M2 8l6-6 6 6"/>
+                </svg>
+                +{{ stats.revenue_growth }}% from last month
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- Main Content Grid -->
+<div class="dashboard-grid">
+    <!-- Recent Tenants -->
+    <div class="dashboard-card">
+        <div class="card-header">
+            <h2 class="card-title">Recent Tenants</h2>
+            <a href="{% url 'admin_tenants' %}" class="btn btn-sm btn-secondary">View All</a>
+        </div>
+        <div class="table-container">
+            <table class="data-table">
+                <thead>
+                    <tr>
+                        <th>Company</th>
+                        <th>Created</th>
+                        <th>Plan</th>
+                        <th>Status</th>
+                        <th>Actions</th>
+                    </tr>
+                </thead>
+                <tbody id="recentTenantsTable">
+                    {% for tenant in recent_tenants %}
+                    <tr>
+                        <td>
+                            <div class="tenant-info">
+                                <div class="tenant-avatar">{{ tenant.name|slice:":1" }}</div>
+                                <div>
+                                    <div class="tenant-name">{{ tenant.name }}</div>
+                                    <div class="tenant-email">{{ tenant.company_email }}</div>
+                                </div>
+                            </div>
+                        </td>
+                        <td>{{ tenant.created_at|date:"M d, Y" }}</td>
+                        <td>
+                            <span class="badge badge-info">{{ tenant.subscription.plan.name|default:"No Plan" }}</span>
+                        </td>
+                        <td>
+                            {% if tenant.is_approved %}
+                                <span class="badge badge-success">Active</span>
+                            {% else %}
+                                <span class="badge badge-warning">Pending</span>
+                            {% endif %}
+                        </td>
+                        <td>
+                            <div class="action-buttons">
+                                <button class="btn-icon" title="View Details" onclick="viewTenant('{{ tenant.id }}')">
+                                    <svg width="16" height="16" fill="none" stroke="currentColor" stroke-width="2">
+                                        <path d="M1 8s3-6 9-6 9 6 9 6-3 6-9 6-9-6-9-6z"/>
+                                        <circle cx="10" cy="8" r="3"/>
+                                    </svg>
+                                </button>
+                                {% if not tenant.is_approved %}
+                                <button class="btn-icon" title="Approve" onclick="approveTenant('{{ tenant.id }}')">
+                                    <svg width="16" height="16" fill="none" stroke="rgb(16, 185, 129)" stroke-width="2">
+                                        <path d="M2 8l4 4 8-8"/>
+                                    </svg>
+                                </button>
+                                {% endif %}
+                            </div>
+                        </td>
+                    </tr>
+                    {% empty %}
+                    <tr>
+                        <td colspan="5" class="empty-state">No tenants found</td>
+                    </tr>
+                    {% endfor %}
+                </tbody>
+            </table>
+        </div>
+    </div>
+
+    <!-- Pending Payments -->
+    <div class="dashboard-card">
+        <div class="card-header">
+            <h2 class="card-title">Pending Payments</h2>
+            <a href="{% url 'admin_payments' %}" class="btn btn-sm btn-secondary">View All</a>
+        </div>
+        <div class="payment-list">
+            {% for payment in pending_payments %}
+            <div class="payment-item">
+                <div class="payment-info">
+                    <div class="payment-tenant">{{ payment.tenant.name }}</div>
+                    <div class="payment-amount">${{ payment.amount }}</div>
+                </div>
+                <div class="payment-meta">
+                    <span class="payment-date">{{ payment.created_at|date:"M d" }}</span>
+                    <span class="badge badge-warning">{{ payment.status }}</span>
+                </div>
+                <div class="payment-actions">
+                    <button class="btn btn-sm btn-success" onclick="verifyPayment('{{ payment.id }}')">Verify</button>
+                    <button class="btn btn-sm btn-danger" onclick="rejectPayment('{{ payment.id }}')">Reject</button>
+                </div>
+            </div>
+            {% empty %}
+            <div class="empty-state">No pending payments</div>
+            {% endfor %}
+        </div>
+    </div>
+</div>
+
+<!-- Charts Row -->
+<div class="charts-grid">
+    <div class="dashboard-card">
+        <div class="card-header">
+            <h2 class="card-title">Tenant Growth</h2>
+            <select class="form-select-sm" id="growthPeriod">
+                <option value="7">Last 7 days</option>
+                <option value="30" selected>Last 30 days</option>
+                <option value="90">Last 90 days</option>
+            </select>
+        </div>
+        <div class="chart-container">
+            <canvas id="growthChart"></canvas>
+        </div>
+    </div>
+
+    <div class="dashboard-card">
+        <div class="card-header">
+            <h2 class="card-title">Revenue Overview</h2>
+            <select class="form-select-sm" id="revenuePeriod">
+                <option value="7">Last 7 days</option>
+                <option value="30" selected>Last 30 days</option>
+                <option value="90">Last 90 days</option>
+            </select>
+        </div>
+        <div class="chart-container">
+            <canvas id="revenueChart"></canvas>
+        </div>
+    </div>
+</div>
+
+<!-- Activity Log -->
+<div class="dashboard-card">
+    <div class="card-header">
+        <h2 class="card-title">Recent Activity</h2>
+        <a href="{% url 'admin_audit_logs' %}" class="btn btn-sm btn-secondary">View All</a>
+    </div>
+    <div class="activity-list">
+        {% for activity in recent_activities %}
+        <div class="activity-item">
+            <div class="activity-icon">
+                <svg width="16" height="16" fill="none" stroke="currentColor" stroke-width="2">
+                    <circle cx="8" cy="8" r="7"/>
+                    <path d="M8 4v4l3 2"/>
+                </svg>
+            </div>
+            <div class="activity-content">
+                <div class="activity-text">{{ activity.action }}</div>
+                <div class="activity-meta">
+                    <span>{{ activity.user.get_full_name }}</span>
+                    <span>•</span>
+                    <span>{{ activity.created_at|timesince }} ago</span>
+                </div>
+            </div>
+        </div>
+        {% empty %}
+        <div class="empty-state">No recent activity</div>
+        {% endfor %}
+    </div>
+</div>
+
+<style>
+.dashboard-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    margin-bottom: 2rem;
+}
+
+.stats-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(250px, 1fr));
+    gap: 1.5rem;
+    margin-bottom: 2rem;
+}
+
+.stat-card {
+    background: var(--card-bg);
+    border: 1px solid var(--border-color);
+    border-radius: 12px;
+    padding: 1.5rem;
+    display: flex;
+    gap: 1rem;
+}
+
+.stat-icon {
+    width: 48px;
+    height: 48px;
+    border-radius: 10px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    flex-shrink: 0;
+}
+
+.stat-content {
+    flex: 1;
+}
+
+.stat-label {
+    font-size: 0.875rem;
+    color: var(--text-secondary);
+    margin-bottom: 0.25rem;
+}
+
+.stat-value {
+    font-size: 2rem;
+    font-weight: 700;
+    color: var(--text-primary);
+    margin-bottom: 0.25rem;
+}
+
+.stat-change {
+    font-size: 0.875rem;
+    color: var(--text-secondary);
+    display: flex;
+    align-items: center;
+    gap: 0.25rem;
+}
+
+.stat-change.positive {
+    color: var(--success-color);
+}
+
+.stat-change svg {
+    width: 14px;
+    height: 14px;
+}
+
+.dashboard-grid {
+    display: grid;
+    grid-template-columns: 2fr 1fr;
+    gap: 1.5rem;
+    margin-bottom: 2rem;
+}
+
+.dashboard-card {
+    background: var(--card-bg);
+    border: 1px solid var(--border-color);
+    border-radius: 12px;
+    overflow: hidden;
+}
+
+.card-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    padding: 1.5rem;
+    border-bottom: 1px solid var(--border-color);
+}
+
+.card-title {
+    font-size: 1.125rem;
+    font-weight: 600;
+    color: var(--text-primary);
+}
+
+.tenant-info {
+    display: flex;
+    align-items: center;
+    gap: 0.75rem;
+}
+
+.tenant-avatar {
+    width: 36px;
+    height: 36px;
+    border-radius: 8px;
+    background: var(--primary-color);
+    color: white;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-weight: 600;
+    font-size: 0.875rem;
+    text-transform: uppercase;
+}
+
+.tenant-name {
+    font-weight: 500;
+    color: var(--text-primary);
+}
+
+.tenant-email {
+    font-size: 0.875rem;
+    color: var(--text-secondary);
+}
+
+.payment-list {
+    padding: 1rem;
+}
+
+.payment-item {
+    padding: 1rem;
+    border: 1px solid var(--border-color);
+    border-radius: 8px;
+    margin-bottom: 0.75rem;
+}
+
+.payment-item:last-child {
+    margin-bottom: 0;
+}
+
+.payment-info {
+    display: flex;
+    justify-content: space-between;
+    margin-bottom: 0.5rem;
+}
+
+.payment-tenant {
+    font-weight: 500;
+    color: var(--text-primary);
+}
+
+.payment-amount {
+    font-weight: 600;
+    color: var(--text-primary);
+    font-size: 1.125rem;
+}
+
+.payment-meta {
+    display: flex;
+    gap: 0.5rem;
+    align-items: center;
+    margin-bottom: 0.75rem;
+}
+
+.payment-date {
+    font-size: 0.875rem;
+    color: var(--text-secondary);
+}
+
+.payment-actions {
+    display: flex;
+    gap: 0.5rem;
+}
+
+.charts-grid {
+    display: grid;
+    grid-template-columns: repeat(2, 1fr);
+    gap: 1.5rem;
+    margin-bottom: 2rem;
+}
+
+.chart-container {
+    padding: 1.5rem;
+    height: 300px;
+}
+
+.activity-list {
+    padding: 1rem;
+}
+
+.activity-item {
+    display: flex;
+    gap: 1rem;
+    padding: 1rem 0;
+    border-bottom: 1px solid var(--border-color);
+}
+
+.activity-item:last-child {
+    border-bottom: none;
+}
+
+.activity-icon {
+    width: 32px;
+    height: 32px;
+    border-radius: 50%;
+    background: var(--hover-bg);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    flex-shrink: 0;
+    color: var(--text-secondary);
+}
+
+.activity-content {
+    flex: 1;
+}
+
+.activity-text {
+    color: var(--text-primary);
+    margin-bottom: 0.25rem;
+}
+
+.activity-meta {
+    font-size: 0.875rem;
+    color: var(--text-secondary);
+    display: flex;
+    gap: 0.5rem;
+}
+
+.form-select-sm {
+    padding: 0.375rem 0.75rem;
+    font-size: 0.875rem;
+    border: 1px solid var(--border-color);
+    border-radius: 6px;
+    background: var(--input-bg);
+    color: var(--text-primary);
+}
+
+@media (max-width: 1024px) {
+    .dashboard-grid {
+        grid-template-columns: 1fr;
+    }
+    
+    .charts-grid {
+        grid-template-columns: 1fr;
+    }
+}
+
+@media (max-width: 768px) {
+    .stats-grid {
+        grid-template-columns: 1fr;
+    }
+}
+</style>
+
+<script>
+// View tenant details
+function viewTenant(tenantId) {
+    window.location.href = `/admin-panel/tenants/${tenantId}/`;
+}
+
+// Approve tenant
+async function approveTenant(tenantId) {
+    if (!confirm('Are you sure you want to approve this tenant?')) return;
+    
+    try {
+        const response = await window.SaaSPlatform.apiRequest(`/api/admin/tenants/${tenantId}/approve/`, {
+            method: 'POST'
+        });
+        
+        if (response.success) {
+            window.SaaSPlatform.showToast('Tenant approved successfully', 'success');
+            location.reload();
+        }
+    } catch (error) {
+        window.SaaSPlatform.showToast('Failed to approve tenant', 'error');
+    }
+}
+
+// Verify payment
+async function verifyPayment(paymentId) {
+    if (!confirm('Verify this payment?')) return;
+    
+    try {
+        const response = await window.SaaSPlatform.apiRequest(`/api/admin/payments/${paymentId}/verify/`, {
+            method: 'POST'
+        });
+        
+        if (response.success) {
+            window.SaaSPlatform.showToast('Payment verified successfully', 'success');
+            location.reload();
+        }
+    } catch (error) {
+        window.SaaSPlatform.showToast('Failed to verify payment', 'error');
+    }
+}
+
+// Reject payment
+async function rejectPayment(paymentId) {
+    const reason = prompt('Enter rejection reason:');
+    if (!reason) return;
+    
+    try {
+        const response = await window.SaaSPlatform.apiRequest(`/api/admin/payments/${paymentId}/reject/`, {
+            method: 'POST',
+            body: JSON.stringify({ reason })
+        });
+        
+        if (response.success) {
+            window.SaaSPlatform.showToast('Payment rejected', 'success');
+            location.reload();
+        }
+    } catch (error) {
+        window.SaaSPlatform.showToast('Failed to reject payment', 'error');
+    }
+}
+</script>
+{% endblock %}
