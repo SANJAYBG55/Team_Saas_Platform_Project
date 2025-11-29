@@ -1,0 +1,135 @@
+<!-- Table Component -->
+<div class="table-container">
+    <table class="table {% if striped %}table-striped{% endif %} {% if hover %}table-hover{% endif %}">
+        {% if caption %}
+        <caption>{{ caption }}</caption>
+        {% endif %}
+        
+        <thead>
+            <tr>
+                {% for column in columns %}
+                <th {% if column.width %}style="width: {{ column.width }};"{% endif %}>
+                    {{ column.label }}
+                    {% if column.sortable %}
+                    <i class="fas fa-sort sort-icon"></i>
+                    {% endif %}
+                </th>
+                {% endfor %}
+            </tr>
+        </thead>
+        
+        <tbody>
+            {% if rows %}
+                {% for row in rows %}
+                <tr>
+                    {% for cell in row %}
+                    <td>{{ cell }}</td>
+                    {% endfor %}
+                </tr>
+                {% endfor %}
+            {% else %}
+            <tr>
+                <td colspan="{{ columns|length }}" class="text-center">
+                    <div class="empty-state">
+                        <i class="fas fa-inbox empty-icon"></i>
+                        <p>{{ empty_message|default:"No data available" }}</p>
+                    </div>
+                </td>
+            </tr>
+            {% endif %}
+        </tbody>
+    </table>
+</div>
+
+<style>
+    .table-container {
+        width: 100%;
+        overflow-x: auto;
+        border: 1px solid var(--border-color);
+        border-radius: var(--border-radius);
+    }
+    
+    .table {
+        width: 100%;
+        border-collapse: collapse;
+        background-color: var(--bg-primary);
+    }
+    
+    .table caption {
+        padding: 1rem;
+        font-weight: 600;
+        text-align: left;
+        color: var(--text-primary);
+        background-color: var(--bg-secondary);
+    }
+    
+    .table thead {
+        background-color: var(--bg-secondary);
+    }
+    
+    .table th {
+        padding: 0.875rem 1rem;
+        text-align: left;
+        font-weight: 600;
+        font-size: 0.875rem;
+        color: var(--text-secondary);
+        text-transform: uppercase;
+        letter-spacing: 0.5px;
+        border-bottom: 1px solid var(--border-color);
+    }
+    
+    .table td {
+        padding: 1rem;
+        color: var(--text-primary);
+        border-bottom: 1px solid var(--border-color);
+    }
+    
+    .table tbody tr:last-child td {
+        border-bottom: none;
+    }
+    
+    .table-striped tbody tr:nth-child(even) {
+        background-color: var(--bg-secondary);
+    }
+    
+    .table-hover tbody tr {
+        transition: background-color var(--transition-speed);
+    }
+    
+    .table-hover tbody tr:hover {
+        background-color: var(--bg-tertiary);
+    }
+    
+    .sort-icon {
+        margin-left: 0.5rem;
+        font-size: 0.75rem;
+        color: var(--text-tertiary);
+    }
+    
+    .empty-state {
+        padding: 3rem 1rem;
+        text-align: center;
+    }
+    
+    .empty-icon {
+        font-size: 3rem;
+        color: var(--text-tertiary);
+        margin-bottom: 1rem;
+    }
+    
+    .empty-state p {
+        color: var(--text-secondary);
+        font-size: 0.875rem;
+    }
+    
+    @media (max-width: 768px) {
+        .table {
+            font-size: 0.875rem;
+        }
+        
+        .table th,
+        .table td {
+            padding: 0.75rem 0.5rem;
+        }
+    }
+</style>
