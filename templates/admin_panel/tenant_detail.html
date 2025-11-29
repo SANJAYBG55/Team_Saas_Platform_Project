@@ -1,0 +1,904 @@
+{% extends "layouts/app.html" %}
+{% load static %}
+
+{% block title %}{{ tenant.company_name }} - Tenant Details - {{ block.super }}{% endblock %}
+
+{% block content %}
+<div class="page-header">
+    <button class="btn-text" onclick="window.location.href='/admin-panel/tenants/'">
+        <svg width="16" height="16" fill="none" stroke="currentColor" stroke-width="2">
+            <path d="M19 12H5M12 19l-7-7 7-7"/>
+        </svg>
+        Back to Tenants
+    </button>
+</div>
+
+<!-- Tenant Header -->
+<div class="tenant-header">
+    <div class="tenant-header-left">
+        <div class="tenant-avatar-large" style="background: {{ tenant.primary_color }}">
+            {{ tenant.company_name|first }}
+        </div>
+        <div>
+            <h1 class="tenant-title">{{ tenant.company_name }}</h1>
+            <div class="tenant-meta">
+                <a href="https://{{ tenant.subdomain }}.saasplatform.com" target="_blank" class="domain-link">
+                    {{ tenant.subdomain }}.saasplatform.com
+                </a>
+                <span class="separator">•</span>
+                <span>Created {{ tenant.created_at|date:"M d, Y" }}</span>
+            </div>
+        </div>
+    </div>
+    <div class="tenant-header-right">
+        <span class="badge badge-large badge-{{ tenant.status|lower }}">{{ tenant.get_status_display }}</span>
+        <div class="header-actions">
+            {% if tenant.status == 'PENDING' %}
+            <button class="btn btn-success" onclick="approveTenant()">Approve</button>
+            <button class="btn btn-outline text-error" onclick="rejectTenant()">Reject</button>
+            {% elif tenant.status == 'ACTIVE' %}
+            <button class="btn btn-warning" onclick="suspendTenant()">Suspend</button>
+            {% elif tenant.status == 'SUSPENDED' %}
+            <button class="btn btn-success" onclick="activateTenant()">Activate</button>
+            {% endif %}
+            <button class="btn btn-secondary" onclick="openModal('editTenantModal')">Edit</button>
+        </div>
+    </div>
+</div>
+
+<!-- Tabs -->
+<div class="tabs-container">
+    <div class="tabs">
+        <button class="tab active" data-tab="overview" onclick="switchTab('overview')">Overview</button>
+        <button class="tab" data-tab="subscription" onclick="switchTab('subscription')">Subscription</button>
+        <button class="tab" data-tab="usage" onclick="switchTab('usage')">Usage & Stats</button>
+        <button class="tab" data-tab="activity" onclick="switchTab('activity')">Activity Log</button>
+        <button class="tab" data-tab="settings" onclick="switchTab('settings')">Settings</button>
+    </div>
+</div>
+
+<!-- Tab Contents -->
+<div id="overviewTab" class="tab-content active">
+    <div class="content-grid">
+        <!-- Owner Information -->
+        <div class="content-card">
+            <div class="card-header">
+                <h2 class="card-title">Owner Information</h2>
+            </div>
+            <div class="info-grid">
+                <div class="info-item">
+                    <label>Full Name</label>
+                    <div class="info-value">{{ tenant.owner.get_full_name }}</div>
+                </div>
+                <div class="info-item">
+                    <label>Email</label>
+                    <div class="info-value">{{ tenant.owner.email }}</div>
+                </div>
+                <div class="info-item">
+                    <label>Phone</label>
+                    <div class="info-value">{{ tenant.owner.phone_number|default:"Not provided" }}</div>
+                </div>
+                <div class="info-item">
+                    <label>Account Created</label>
+                    <div class="info-value">{{ tenant.owner.date_joined|date:"M d, Y" }}</div>
+                </div>
+            </div>
+        </div>
+
+        <!-- Company Information -->
+        <div class="content-card">
+            <div class="card-header">
+                <h2 class="card-title">Company Information</h2>
+            </div>
+            <div class="info-grid">
+                <div class="info-item">
+                    <label>Company Name</label>
+                    <div class="info-value">{{ tenant.company_name }}</div>
+                </div>
+                <div class="info-item">
+                    <label>Subdomain</label>
+                    <div class="info-value">{{ tenant.subdomain }}</div>
+                </div>
+                <div class="info-item">
+                    <label>Custom Domain</label>
+                    <div class="info-value">{{ tenant.custom_domain|default:"Not configured" }}</div>
+                </div>
+                <div class="info-item">
+                    <label>Primary Color</label>
+                    <div class="info-value">
+                        <div class="color-preview" style="background: {{ tenant.primary_color }}"></div>
+                        {{ tenant.primary_color }}
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Quick Stats -->
+    <div class="stats-grid">
+        <div class="stat-card">
+            <div class="stat-label">Total Members</div>
+            <div class="stat-value">{{ tenant.members_count }}</div>
+        </div>
+        <div class="stat-card">
+            <div class="stat-label">Active Teams</div>
+            <div class="stat-value">{{ tenant.teams_count }}</div>
+        </div>
+        <div class="stat-card">
+            <div class="stat-label">Total Tasks</div>
+            <div class="stat-value">{{ tenant.tasks_count }}</div>
+        </div>
+        <div class="stat-card">
+            <div class="stat-label">Storage Used</div>
+            <div class="stat-value">{{ tenant.storage_used_gb|floatformat:1 }}GB</div>
+        </div>
+    </div>
+
+    <!-- Recent Activity -->
+    <div class="content-card">
+        <div class="card-header">
+            <h2 class="card-title">Recent Activity</h2>
+        </div>
+        <div class="activity-list">
+            {% for activity in recent_activities %}
+            <div class="activity-item">
+                <div class="activity-icon">
+                    <svg width="16" height="16" fill="none" stroke="currentColor" stroke-width="2">
+                        <circle cx="12" cy="12" r="10"/>
+                    </svg>
+                </div>
+                <div class="activity-content">
+                    <div class="activity-text">{{ activity.description }}</div>
+                    <div class="activity-time">{{ activity.created_at|timesince }} ago</div>
+                </div>
+            </div>
+            {% empty %}
+            <div class="empty-state">No recent activity</div>
+            {% endfor %}
+        </div>
+    </div>
+</div>
+
+<div id="subscriptionTab" class="tab-content">
+    <div class="content-grid">
+        <!-- Current Plan -->
+        <div class="content-card">
+            <div class="card-header">
+                <h2 class="card-title">Current Subscription</h2>
+            </div>
+            <div class="subscription-details">
+                <div class="plan-info">
+                    <h3 class="plan-name">{{ tenant.subscription.plan.name }}</h3>
+                    <div class="plan-price">
+                        ${{ tenant.subscription.plan.price }}/{{ tenant.subscription.plan.billing_interval|lower }}
+                    </div>
+                </div>
+                
+                {% if tenant.subscription.is_trial %}
+                <div class="trial-badge">
+                    <svg width="16" height="16" fill="none" stroke="var(--warning-color)" stroke-width="2">
+                        <circle cx="8" cy="8" r="7"/>
+                        <path d="M8 4v4M8 12h.01"/>
+                    </svg>
+                    Trial Period - {{ tenant.subscription.trial_days_remaining }} days remaining
+                </div>
+                {% endif %}
+
+                <div class="info-grid">
+                    <div class="info-item">
+                        <label>Status</label>
+                        <span class="badge badge-{{ tenant.subscription.status|lower }}">
+                            {{ tenant.subscription.get_status_display }}
+                        </span>
+                    </div>
+                    <div class="info-item">
+                        <label>Started</label>
+                        <div class="info-value">{{ tenant.subscription.start_date|date:"M d, Y" }}</div>
+                    </div>
+                    <div class="info-item">
+                        <label>Current Period</label>
+                        <div class="info-value">
+                            {{ tenant.subscription.current_period_start|date:"M d" }} - 
+                            {{ tenant.subscription.current_period_end|date:"M d, Y" }}
+                        </div>
+                    </div>
+                    <div class="info-item">
+                        <label>Next Billing Date</label>
+                        <div class="info-value">{{ tenant.subscription.current_period_end|date:"M d, Y" }}</div>
+                    </div>
+                </div>
+
+                <div class="plan-features">
+                    <h4>Plan Features</h4>
+                    <ul>
+                        <li>{{ tenant.subscription.plan.max_users }} users</li>
+                        <li>{{ tenant.subscription.plan.max_teams }} teams</li>
+                        <li>{{ tenant.subscription.plan.max_storage_gb }}GB storage</li>
+                        {% if tenant.subscription.plan.enable_advanced_reports %}<li>Advanced reports</li>{% endif %}
+                        {% if tenant.subscription.plan.enable_priority_support %}<li>Priority support</li>{% endif %}
+                        {% if tenant.subscription.plan.enable_api_access %}<li>API access</li>{% endif %}
+                        {% if tenant.subscription.plan.enable_custom_branding %}<li>Custom branding</li>{% endif %}
+                    </ul>
+                </div>
+            </div>
+        </div>
+
+        <!-- Payment History -->
+        <div class="content-card">
+            <div class="card-header">
+                <h2 class="card-title">Payment History</h2>
+            </div>
+            <div class="table-container">
+                <table class="data-table">
+                    <thead>
+                        <tr>
+                            <th>Date</th>
+                            <th>Amount</th>
+                            <th>Status</th>
+                            <th>Actions</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        {% for payment in tenant.payments.all %}
+                        <tr>
+                            <td>{{ payment.created_at|date:"M d, Y" }}</td>
+                            <td>${{ payment.amount }}</td>
+                            <td>
+                                <span class="badge badge-{{ payment.status|lower }}">
+                                    {{ payment.get_status_display }}
+                                </span>
+                            </td>
+                            <td>
+                                {% if payment.status == 'PENDING' %}
+                                <button class="btn btn-sm btn-success" onclick="verifyPayment('{{ payment.id }}')">Verify</button>
+                                <button class="btn btn-sm btn-outline text-error" onclick="rejectPayment('{{ payment.id }}')">Reject</button>
+                                {% endif %}
+                            </td>
+                        </tr>
+                        {% empty %}
+                        <tr>
+                            <td colspan="4" class="empty-state">No payment history</td>
+                        </tr>
+                        {% endfor %}
+                    </tbody>
+                </table>
+            </div>
+        </div>
+    </div>
+</div>
+
+<div id="usageTab" class="tab-content">
+    <div class="content-card">
+        <div class="card-header">
+            <h2 class="card-title">Resource Usage</h2>
+        </div>
+        
+        <div class="usage-meters">
+            <div class="usage-meter">
+                <div class="usage-header">
+                    <span class="usage-label">Team Members</span>
+                    <span class="usage-value">{{ tenant.members_count }} / {{ tenant.subscription.plan.max_users }}</span>
+                </div>
+                <div class="progress-bar">
+                    <div class="progress-fill" style="width: {{ tenant.members_percentage }}%;"></div>
+                </div>
+            </div>
+
+            <div class="usage-meter">
+                <div class="usage-header">
+                    <span class="usage-label">Teams</span>
+                    <span class="usage-value">{{ tenant.teams_count }} / {{ tenant.subscription.plan.max_teams }}</span>
+                </div>
+                <div class="progress-bar">
+                    <div class="progress-fill" style="width: {{ tenant.teams_percentage }}%;"></div>
+                </div>
+            </div>
+
+            <div class="usage-meter">
+                <div class="usage-header">
+                    <span class="usage-label">Storage</span>
+                    <span class="usage-value">{{ tenant.storage_used_gb|floatformat:1 }}GB / {{ tenant.subscription.plan.max_storage_gb }}GB</span>
+                </div>
+                <div class="progress-bar">
+                    <div class="progress-fill" style="width: {{ tenant.storage_percentage }}%;"></div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <div class="stats-grid">
+        <div class="stat-card">
+            <div class="stat-label">Total Tasks Created</div>
+            <div class="stat-value">{{ tenant.tasks_count }}</div>
+        </div>
+        <div class="stat-card">
+            <div class="stat-label">Completed Tasks</div>
+            <div class="stat-value">{{ tenant.completed_tasks_count }}</div>
+        </div>
+        <div class="stat-card">
+            <div class="stat-label">Active Teams</div>
+            <div class="stat-value">{{ tenant.teams_count }}</div>
+        </div>
+        <div class="stat-card">
+            <div class="stat-label">Total Comments</div>
+            <div class="stat-value">{{ tenant.comments_count }}</div>
+        </div>
+    </div>
+</div>
+
+<div id="activityTab" class="tab-content">
+    <div class="content-card">
+        <div class="card-header">
+            <h2 class="card-title">Activity Log</h2>
+            <div class="filters">
+                <select class="filter-select" id="activityFilter">
+                    <option value="">All Activities</option>
+                    <option value="login">Logins</option>
+                    <option value="team">Team Actions</option>
+                    <option value="task">Task Actions</option>
+                    <option value="member">Member Actions</option>
+                    <option value="payment">Payments</option>
+                </select>
+            </div>
+        </div>
+        <div class="activity-timeline">
+            {% for log in activity_logs %}
+            <div class="timeline-item">
+                <div class="timeline-dot"></div>
+                <div class="timeline-content">
+                    <div class="activity-header">
+                        <strong>{{ log.user.get_full_name }}</strong>
+                        <span class="activity-time">{{ log.created_at|date:"M d, Y H:i" }}</span>
+                    </div>
+                    <div class="activity-description">{{ log.description }}</div>
+                    {% if log.ip_address %}
+                    <div class="activity-meta">IP: {{ log.ip_address }}</div>
+                    {% endif %}
+                </div>
+            </div>
+            {% empty %}
+            <div class="empty-state">No activity logs</div>
+            {% endfor %}
+        </div>
+    </div>
+</div>
+
+<div id="settingsTab" class="tab-content">
+    <div class="content-card">
+        <div class="card-header">
+            <h2 class="card-title">Tenant Settings</h2>
+        </div>
+        
+        <div class="settings-form">
+            <div class="form-group">
+                <label>Company Name</label>
+                <input type="text" class="form-control" id="companyName" value="{{ tenant.company_name }}">
+            </div>
+
+            <div class="form-group">
+                <label>Subdomain</label>
+                <div class="input-group">
+                    <input type="text" class="form-control" id="subdomain" value="{{ tenant.subdomain }}">
+                    <span class="input-suffix">.saasplatform.com</span>
+                </div>
+            </div>
+
+            <div class="form-group">
+                <label>Custom Domain</label>
+                <input type="text" class="form-control" id="customDomain" value="{{ tenant.custom_domain }}" 
+                       placeholder="example.com">
+                <small class="form-help">Configure DNS to point to our servers</small>
+            </div>
+
+            <div class="form-group">
+                <label>Primary Color</label>
+                <input type="color" class="form-control-color" id="primaryColor" value="{{ tenant.primary_color }}">
+            </div>
+
+            <div class="form-actions">
+                <button class="btn btn-primary" onclick="saveTenantSettings()">Save Changes</button>
+            </div>
+        </div>
+
+        <div class="danger-zone">
+            <h3 class="danger-title">Danger Zone</h3>
+            <div class="danger-actions">
+                <div>
+                    <strong>Suspend Tenant</strong>
+                    <p>Temporarily disable access to this tenant's account</p>
+                </div>
+                <button class="btn btn-outline text-error" onclick="suspendTenant()">Suspend</button>
+            </div>
+            <div class="danger-actions">
+                <div>
+                    <strong>Delete Tenant</strong>
+                    <p>Permanently delete this tenant and all associated data</p>
+                </div>
+                <button class="btn btn-outline text-error" onclick="deleteTenant()">Delete</button>
+            </div>
+        </div>
+    </div>
+</div>
+
+<style>
+.tenant-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    padding: 2rem;
+    background: var(--card-bg);
+    border: 1px solid var(--border-color);
+    border-radius: 12px;
+    margin-bottom: 2rem;
+}
+
+.tenant-header-left {
+    display: flex;
+    gap: 1.5rem;
+    align-items: center;
+}
+
+.tenant-avatar-large {
+    width: 80px;
+    height: 80px;
+    border-radius: 16px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 2rem;
+    font-weight: 700;
+    color: white;
+}
+
+.tenant-title {
+    font-size: 1.75rem;
+    font-weight: 700;
+    color: var(--text-primary);
+    margin-bottom: 0.5rem;
+}
+
+.tenant-meta {
+    display: flex;
+    gap: 0.5rem;
+    align-items: center;
+    color: var(--text-secondary);
+}
+
+.separator {
+    opacity: 0.5;
+}
+
+.tenant-header-right {
+    display: flex;
+    align-items: center;
+    gap: 1rem;
+}
+
+.badge-large {
+    padding: 0.5rem 1rem;
+    font-size: 1rem;
+}
+
+.header-actions {
+    display: flex;
+    gap: 0.5rem;
+}
+
+.content-grid {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 1.5rem;
+    margin-bottom: 2rem;
+}
+
+.info-grid {
+    display: grid;
+    gap: 1.5rem;
+}
+
+.info-item {
+    display: flex;
+    flex-direction: column;
+    gap: 0.5rem;
+}
+
+.info-item label {
+    font-size: 0.875rem;
+    font-weight: 500;
+    color: var(--text-secondary);
+}
+
+.info-value {
+    color: var(--text-primary);
+    display: flex;
+    align-items: center;
+    gap: 0.5rem;
+}
+
+.color-preview {
+    width: 24px;
+    height: 24px;
+    border-radius: 4px;
+    border: 1px solid var(--border-color);
+}
+
+.stats-grid {
+    display: grid;
+    grid-template-columns: repeat(4, 1fr);
+    gap: 1.5rem;
+    margin-bottom: 2rem;
+}
+
+.stat-card {
+    background: var(--card-bg);
+    border: 1px solid var(--border-color);
+    border-radius: 12px;
+    padding: 1.5rem;
+    text-align: center;
+}
+
+.stat-label {
+    font-size: 0.875rem;
+    color: var(--text-secondary);
+    margin-bottom: 0.5rem;
+}
+
+.stat-value {
+    font-size: 2rem;
+    font-weight: 700;
+    color: var(--text-primary);
+}
+
+.activity-list {
+    display: flex;
+    flex-direction: column;
+    gap: 1rem;
+}
+
+.activity-item {
+    display: flex;
+    gap: 1rem;
+    padding: 1rem;
+    background: var(--hover-bg);
+    border-radius: 8px;
+}
+
+.activity-icon {
+    color: var(--text-secondary);
+}
+
+.activity-content {
+    flex: 1;
+}
+
+.activity-text {
+    color: var(--text-primary);
+    margin-bottom: 0.25rem;
+}
+
+.activity-time {
+    font-size: 0.875rem;
+    color: var(--text-secondary);
+}
+
+.subscription-details {
+    display: flex;
+    flex-direction: column;
+    gap: 1.5rem;
+}
+
+.plan-info {
+    padding: 1.5rem;
+    background: var(--hover-bg);
+    border-radius: 8px;
+}
+
+.plan-name {
+    font-size: 1.5rem;
+    font-weight: 700;
+    color: var(--text-primary);
+    margin-bottom: 0.5rem;
+}
+
+.plan-price {
+    font-size: 1.25rem;
+    color: var(--text-secondary);
+}
+
+.trial-badge {
+    display: flex;
+    align-items: center;
+    gap: 0.5rem;
+    padding: 0.75rem;
+    background: rgba(245, 158, 11, 0.1);
+    border: 1px solid rgba(245, 158, 11, 0.2);
+    border-radius: 8px;
+    color: var(--warning-color);
+}
+
+.plan-features ul {
+    list-style: none;
+    padding: 0;
+    margin: 0;
+}
+
+.plan-features li {
+    padding: 0.5rem 0;
+    color: var(--text-secondary);
+}
+
+.usage-meters {
+    display: flex;
+    flex-direction: column;
+    gap: 2rem;
+}
+
+.usage-meter {
+    display: flex;
+    flex-direction: column;
+    gap: 0.5rem;
+}
+
+.usage-header {
+    display: flex;
+    justify-content: space-between;
+}
+
+.usage-label {
+    font-weight: 500;
+    color: var(--text-primary);
+}
+
+.usage-value {
+    font-weight: 600;
+    color: var(--text-secondary);
+}
+
+.progress-bar {
+    height: 12px;
+    background: var(--hover-bg);
+    border-radius: 6px;
+    overflow: hidden;
+}
+
+.progress-fill {
+    height: 100%;
+    background: var(--primary-color);
+    border-radius: 6px;
+    transition: width 0.3s;
+}
+
+.activity-timeline {
+    position: relative;
+    padding-left: 2rem;
+}
+
+.timeline-item {
+    position: relative;
+    padding-bottom: 2rem;
+}
+
+.timeline-dot {
+    position: absolute;
+    left: -2rem;
+    top: 0.5rem;
+    width: 12px;
+    height: 12px;
+    border-radius: 50%;
+    background: var(--primary-color);
+    border: 3px solid var(--card-bg);
+}
+
+.timeline-item::before {
+    content: '';
+    position: absolute;
+    left: calc(-2rem + 5px);
+    top: 0.5rem;
+    bottom: -2rem;
+    width: 2px;
+    background: var(--border-color);
+}
+
+.timeline-item:last-child::before {
+    display: none;
+}
+
+.activity-header {
+    display: flex;
+    justify-content: space-between;
+    margin-bottom: 0.5rem;
+}
+
+.activity-description {
+    color: var(--text-secondary);
+    margin-bottom: 0.25rem;
+}
+
+.activity-meta {
+    font-size: 0.875rem;
+    color: var(--text-secondary);
+}
+
+.settings-form {
+    display: flex;
+    flex-direction: column;
+    gap: 1.5rem;
+    margin-bottom: 2rem;
+}
+
+.input-group {
+    display: flex;
+    align-items: center;
+}
+
+.input-suffix {
+    padding: 0.5rem 0.75rem;
+    background: var(--hover-bg);
+    border: 1px solid var(--border-color);
+    border-left: none;
+    border-radius: 0 6px 6px 0;
+    color: var(--text-secondary);
+}
+
+.input-group input {
+    border-radius: 6px 0 0 6px;
+}
+
+.form-control-color {
+    width: 100px;
+    height: 50px;
+    border: 1px solid var(--border-color);
+    border-radius: 6px;
+    cursor: pointer;
+}
+
+.danger-zone {
+    border-top: 1px solid var(--border-color);
+    padding-top: 2rem;
+}
+
+.danger-title {
+    color: var(--error-color);
+    margin-bottom: 1rem;
+}
+
+.danger-actions {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    padding: 1.5rem;
+    border: 1px solid rgba(239, 68, 68, 0.2);
+    border-radius: 8px;
+    margin-bottom: 1rem;
+}
+
+@media (max-width: 1024px) {
+    .content-grid,
+    .stats-grid {
+        grid-template-columns: 1fr;
+    }
+    
+    .tenant-header {
+        flex-direction: column;
+        gap: 1.5rem;
+    }
+}
+</style>
+
+<script>
+function switchTab(tabName) {
+    // Hide all tabs
+    document.querySelectorAll('.tab-content').forEach(tab => {
+        tab.classList.remove('active');
+    });
+    document.querySelectorAll('.tab').forEach(tab => {
+        tab.classList.remove('active');
+    });
+    
+    // Show selected tab
+    document.getElementById(tabName + 'Tab').classList.add('active');
+    document.querySelector(`[data-tab="${tabName}"]`).classList.add('active');
+}
+
+async function approveTenant() {
+    if (!confirm('Approve this tenant?')) return;
+    
+    try {
+        await window.SaaSPlatform.apiRequest('/api/admin/tenants/{{ tenant.id }}/approve/', {
+            method: 'POST'
+        });
+        window.SaaSPlatform.showToast('Tenant approved', 'success');
+        location.reload();
+    } catch (error) {
+        window.SaaSPlatform.showToast('Failed to approve tenant', 'error');
+    }
+}
+
+async function suspendTenant() {
+    if (!confirm('Suspend this tenant?')) return;
+    
+    try {
+        await window.SaaSPlatform.apiRequest('/api/admin/tenants/{{ tenant.id }}/suspend/', {
+            method: 'POST'
+        });
+        window.SaaSPlatform.showToast('Tenant suspended', 'success');
+        location.reload();
+    } catch (error) {
+        window.SaaSPlatform.showToast('Failed to suspend tenant', 'error');
+    }
+}
+
+async function activateTenant() {
+    if (!confirm('Activate this tenant?')) return;
+    
+    try {
+        await window.SaaSPlatform.apiRequest('/api/admin/tenants/{{ tenant.id }}/activate/', {
+            method: 'POST'
+        });
+        window.SaaSPlatform.showToast('Tenant activated', 'success');
+        location.reload();
+    } catch (error) {
+        window.SaaSPlatform.showToast('Failed to activate tenant', 'error');
+    }
+}
+
+async function saveTenantSettings() {
+    const data = {
+        company_name: document.getElementById('companyName').value,
+        subdomain: document.getElementById('subdomain').value,
+        custom_domain: document.getElementById('customDomain').value,
+        primary_color: document.getElementById('primaryColor').value
+    };
+    
+    try {
+        await window.SaaSPlatform.apiRequest('/api/admin/tenants/{{ tenant.id }}/', {
+            method: 'PATCH',
+            body: JSON.stringify(data)
+        });
+        window.SaaSPlatform.showToast('Settings saved', 'success');
+        location.reload();
+    } catch (error) {
+        window.SaaSPlatform.showToast('Failed to save settings', 'error');
+    }
+}
+
+async function deleteTenant() {
+    const confirmation = prompt('Type DELETE to confirm:');
+    if (confirmation !== 'DELETE') return;
+    
+    try {
+        await window.SaaSPlatform.apiRequest('/api/admin/tenants/{{ tenant.id }}/', {
+            method: 'DELETE'
+        });
+        window.SaaSPlatform.showToast('Tenant deleted', 'success');
+        window.location.href = '/admin-panel/tenants/';
+    } catch (error) {
+        window.SaaSPlatform.showToast('Failed to delete tenant', 'error');
+    }
+}
+
+async function verifyPayment(paymentId) {
+    try {
+        await window.SaaSPlatform.apiRequest(`/api/admin/payments/${paymentId}/verify/`, {
+            method: 'POST'
+        });
+        window.SaaSPlatform.showToast('Payment verified', 'success');
+        location.reload();
+    } catch (error) {
+        window.SaaSPlatform.showToast('Failed to verify payment', 'error');
+    }
+}
+
+async function rejectPayment(paymentId) {
+    try {
+        await window.SaaSPlatform.apiRequest(`/api/admin/payments/${paymentId}/reject/`, {
+            method: 'POST'
+        });
+        window.SaaSPlatform.showToast('Payment rejected', 'success');
+        location.reload();
+    } catch (error) {
+        window.SaaSPlatform.showToast('Failed to reject payment', 'error');
+    }
+}
+</script>
+{% endblock %}

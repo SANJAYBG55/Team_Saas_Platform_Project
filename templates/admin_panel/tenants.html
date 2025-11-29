@@ -1,0 +1,528 @@
+{% extends "layouts/app.html" %}
+{% load static %}
+
+{% block title %}Tenants - {{ block.super }}{% endblock %}
+
+{% block content %}
+<div class="page-header">
+    <div>
+        <h1 class="page-title">Tenant Management</h1>
+        <p class="page-subtitle">Manage all tenants and their subscriptions</p>
+    </div>
+    <button class="btn btn-primary" onclick="openModal('createTenantModal')">
+        <svg width="16" height="16" fill="none" stroke="currentColor" stroke-width="2">
+            <path d="M12 5v14M5 12h14"/>
+        </svg>
+        Create Tenant
+    </button>
+</div>
+
+<!-- Stats Cards -->
+<div class="stats-grid">
+    <div class="stat-card">
+        <div class="stat-icon" style="background: rgba(37, 99, 235, 0.1); color: var(--primary-color);">
+            <svg width="24" height="24" fill="none" stroke="currentColor" stroke-width="2">
+                <path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"/>
+                <circle cx="9" cy="7" r="4"/>
+                <path d="M23 21v-2a4 4 0 0 0-3-3.87M16 3.13a4 4 0 0 1 0 7.75"/>
+            </svg>
+        </div>
+        <div class="stat-info">
+            <div class="stat-label">Total Tenants</div>
+            <div class="stat-value">{{ total_tenants }}</div>
+            <div class="stat-trend positive">+{{ new_this_month }} this month</div>
+        </div>
+    </div>
+
+    <div class="stat-card">
+        <div class="stat-icon" style="background: rgba(16, 185, 129, 0.1); color: var(--success-color);">
+            <svg width="24" height="24" fill="none" stroke="currentColor" stroke-width="2">
+                <circle cx="12" cy="12" r="10"/>
+                <path d="M12 6v6l4 2"/>
+            </svg>
+        </div>
+        <div class="stat-info">
+            <div class="stat-label">Active</div>
+            <div class="stat-value">{{ active_tenants }}</div>
+            <div class="stat-trend">{{ active_percentage|floatformat:0 }}% of total</div>
+        </div>
+    </div>
+
+    <div class="stat-card">
+        <div class="stat-icon" style="background: rgba(245, 158, 11, 0.1); color: var(--warning-color);">
+            <svg width="24" height="24" fill="none" stroke="currentColor" stroke-width="2">
+                <circle cx="12" cy="12" r="10"/>
+                <path d="M12 8v4M12 16h.01"/>
+            </svg>
+        </div>
+        <div class="stat-info">
+            <div class="stat-label">Pending Approval</div>
+            <div class="stat-value">{{ pending_tenants }}</div>
+            <div class="stat-trend">Requires action</div>
+        </div>
+    </div>
+
+    <div class="stat-card">
+        <div class="stat-icon" style="background: rgba(239, 68, 68, 0.1); color: var(--error-color);">
+            <svg width="24" height="24" fill="none" stroke="currentColor" stroke-width="2">
+                <path d="M10.29 3.86L1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0z"/>
+                <path d="M12 9v4M12 17h.01"/>
+            </svg>
+        </div>
+        <div class="stat-info">
+            <div class="stat-label">Suspended</div>
+            <div class="stat-value">{{ suspended_tenants }}</div>
+            <div class="stat-trend">Payment issues</div>
+        </div>
+    </div>
+</div>
+
+<!-- Filters and Search -->
+<div class="content-card">
+    <div class="filters-bar">
+        <div class="search-box">
+            <svg width="16" height="16" fill="none" stroke="currentColor" stroke-width="2">
+                <circle cx="11" cy="11" r="8"/>
+                <path d="m21 21-4.35-4.35"/>
+            </svg>
+            <input type="text" id="searchInput" placeholder="Search by name, domain, or email..." onkeyup="filterTenants()">
+        </div>
+        
+        <div class="filters">
+            <select id="statusFilter" class="filter-select" onchange="filterTenants()">
+                <option value="">All Statuses</option>
+                <option value="TRIAL">Trial</option>
+                <option value="ACTIVE">Active</option>
+                <option value="SUSPENDED">Suspended</option>
+                <option value="CANCELLED">Cancelled</option>
+                <option value="PENDING">Pending Approval</option>
+            </select>
+
+            <select id="planFilter" class="filter-select" onchange="filterTenants()">
+                <option value="">All Plans</option>
+                {% for plan in subscription_plans %}
+                <option value="{{ plan.id }}">{{ plan.name }}</option>
+                {% endfor %}
+            </select>
+
+            <select id="sortBy" class="filter-select" onchange="filterTenants()">
+                <option value="-created_at">Newest First</option>
+                <option value="created_at">Oldest First</option>
+                <option value="company_name">Name (A-Z)</option>
+                <option value="-company_name">Name (Z-A)</option>
+            </select>
+        </div>
+
+        <div class="bulk-actions">
+            <button class="btn btn-sm btn-secondary" onclick="exportTenants()">
+                <svg width="16" height="16" fill="none" stroke="currentColor" stroke-width="2">
+                    <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4M7 10l5 5 5-5M12 15V3"/>
+                </svg>
+                Export
+            </button>
+        </div>
+    </div>
+
+    <!-- Tenants Table -->
+    <div class="table-container">
+        <table class="data-table">
+            <thead>
+                <tr>
+                    <th>
+                        <input type="checkbox" id="selectAll" onchange="toggleSelectAll()">
+                    </th>
+                    <th>Tenant</th>
+                    <th>Domain</th>
+                    <th>Plan</th>
+                    <th>Status</th>
+                    <th>Members</th>
+                    <th>Created</th>
+                    <th>Actions</th>
+                </tr>
+            </thead>
+            <tbody id="tenantsTableBody">
+                {% for tenant in tenants %}
+                <tr data-tenant-id="{{ tenant.id }}" class="tenant-row">
+                    <td>
+                        <input type="checkbox" class="tenant-checkbox" value="{{ tenant.id }}">
+                    </td>
+                    <td>
+                        <div class="tenant-info">
+                            <div class="tenant-avatar" style="background: {{ tenant.primary_color }}">
+                                {{ tenant.company_name|first }}
+                            </div>
+                            <div>
+                                <div class="tenant-name">{{ tenant.company_name }}</div>
+                                <div class="tenant-email">{{ tenant.owner.email }}</div>
+                            </div>
+                        </div>
+                    </td>
+                    <td>
+                        <a href="https://{{ tenant.subdomain }}.saasplatform.com" target="_blank" class="domain-link">
+                            {{ tenant.subdomain }}.saasplatform.com
+                        </a>
+                        {% if tenant.custom_domain %}
+                        <br><small>{{ tenant.custom_domain }}</small>
+                        {% endif %}
+                    </td>
+                    <td>
+                        <span class="plan-badge">{{ tenant.subscription.plan.name }}</span>
+                    </td>
+                    <td>
+                        <span class="badge badge-{{ tenant.get_status_display|lower }}">
+                            {{ tenant.get_status_display }}
+                        </span>
+                    </td>
+                    <td>{{ tenant.members_count }}</td>
+                    <td>{{ tenant.created_at|date:"M d, Y" }}</td>
+                    <td>
+                        <div class="action-buttons">
+                            <a href="/admin-panel/tenants/{{ tenant.id }}/" class="btn-icon" title="View Details">
+                                <svg width="16" height="16" fill="none" stroke="currentColor" stroke-width="2">
+                                    <path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"/>
+                                    <circle cx="12" cy="12" r="3"/>
+                                </svg>
+                            </a>
+                            {% if tenant.status == 'PENDING' %}
+                            <button class="btn-icon text-success" title="Approve" onclick="approveTenant('{{ tenant.id }}')">
+                                <svg width="16" height="16" fill="none" stroke="currentColor" stroke-width="2">
+                                    <path d="M20 6L9 17l-5-5"/>
+                                </svg>
+                            </button>
+                            <button class="btn-icon text-error" title="Reject" onclick="rejectTenant('{{ tenant.id }}')">
+                                <svg width="16" height="16" fill="none" stroke="currentColor" stroke-width="2">
+                                    <path d="M18 6L6 18M6 6l12 12"/>
+                                </svg>
+                            </button>
+                            {% elif tenant.status == 'ACTIVE' %}
+                            <button class="btn-icon text-warning" title="Suspend" onclick="suspendTenant('{{ tenant.id }}')">
+                                <svg width="16" height="16" fill="none" stroke="currentColor" stroke-width="2">
+                                    <circle cx="12" cy="12" r="10"/>
+                                    <path d="M12 8v4M12 16h.01"/>
+                                </svg>
+                            </button>
+                            {% elif tenant.status == 'SUSPENDED' %}
+                            <button class="btn-icon text-success" title="Activate" onclick="activateTenant('{{ tenant.id }}')">
+                                <svg width="16" height="16" fill="none" stroke="currentColor" stroke-width="2">
+                                    <path d="M20 6L9 17l-5-5"/>
+                                </svg>
+                            </button>
+                            {% endif %}
+                            <button class="btn-icon" title="More" onclick="openTenantMenu('{{ tenant.id }}')">
+                                <svg width="16" height="16" fill="none" stroke="currentColor" stroke-width="2">
+                                    <circle cx="12" cy="5" r="1"/>
+                                    <circle cx="12" cy="12" r="1"/>
+                                    <circle cx="12" cy="19" r="1"/>
+                                </svg>
+                            </button>
+                        </div>
+                    </td>
+                </tr>
+                {% empty %}
+                <tr>
+                    <td colspan="8" class="empty-state">No tenants found</td>
+                </tr>
+                {% endfor %}
+            </tbody>
+        </table>
+    </div>
+
+    <!-- Pagination -->
+    {% if tenants.has_other_pages %}
+    <div class="pagination">
+        {% if tenants.has_previous %}
+        <a href="?page={{ tenants.previous_page_number }}" class="pagination-link">Previous</a>
+        {% endif %}
+        
+        <div class="pagination-numbers">
+            {% for page_num in tenants.paginator.page_range %}
+                {% if page_num == tenants.number %}
+                <span class="pagination-link active">{{ page_num }}</span>
+                {% else %}
+                <a href="?page={{ page_num }}" class="pagination-link">{{ page_num }}</a>
+                {% endif %}
+            {% endfor %}
+        </div>
+        
+        {% if tenants.has_next %}
+        <a href="?page={{ tenants.next_page_number }}" class="pagination-link">Next</a>
+        {% endif %}
+    </div>
+    {% endif %}
+</div>
+
+<style>
+.stats-grid {
+    display: grid;
+    grid-template-columns: repeat(4, 1fr);
+    gap: 1.5rem;
+    margin-bottom: 2rem;
+}
+
+.stat-card {
+    background: var(--card-bg);
+    border: 1px solid var(--border-color);
+    border-radius: 12px;
+    padding: 1.5rem;
+    display: flex;
+    gap: 1rem;
+}
+
+.stat-icon {
+    width: 48px;
+    height: 48px;
+    border-radius: 12px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    flex-shrink: 0;
+}
+
+.stat-info {
+    flex: 1;
+}
+
+.stat-label {
+    font-size: 0.875rem;
+    color: var(--text-secondary);
+    margin-bottom: 0.25rem;
+}
+
+.stat-value {
+    font-size: 2rem;
+    font-weight: 700;
+    color: var(--text-primary);
+    margin-bottom: 0.25rem;
+}
+
+.stat-trend {
+    font-size: 0.875rem;
+    color: var(--text-secondary);
+}
+
+.stat-trend.positive {
+    color: var(--success-color);
+}
+
+.filters-bar {
+    display: flex;
+    gap: 1rem;
+    align-items: center;
+    margin-bottom: 1.5rem;
+    flex-wrap: wrap;
+}
+
+.search-box {
+    flex: 1;
+    min-width: 300px;
+}
+
+.filters {
+    display: flex;
+    gap: 0.75rem;
+}
+
+.filter-select {
+    padding: 0.5rem 0.75rem;
+    border: 1px solid var(--border-color);
+    border-radius: 6px;
+    background: var(--body-bg);
+    color: var(--text-primary);
+}
+
+.tenant-info {
+    display: flex;
+    align-items: center;
+    gap: 0.75rem;
+}
+
+.tenant-avatar {
+    width: 40px;
+    height: 40px;
+    border-radius: 8px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-weight: 600;
+    color: white;
+    font-size: 1.125rem;
+}
+
+.tenant-name {
+    font-weight: 600;
+    color: var(--text-primary);
+}
+
+.tenant-email {
+    font-size: 0.875rem;
+    color: var(--text-secondary);
+}
+
+.domain-link {
+    color: var(--primary-color);
+    text-decoration: none;
+}
+
+.domain-link:hover {
+    text-decoration: underline;
+}
+
+.plan-badge {
+    display: inline-block;
+    padding: 0.25rem 0.75rem;
+    background: var(--hover-bg);
+    border: 1px solid var(--border-color);
+    border-radius: 12px;
+    font-size: 0.875rem;
+    font-weight: 500;
+}
+
+.action-buttons {
+    display: flex;
+    gap: 0.25rem;
+}
+
+.pagination {
+    display: flex;
+    justify-content: center;
+    align-items: center;
+    gap: 0.5rem;
+    margin-top: 1.5rem;
+    padding-top: 1.5rem;
+    border-top: 1px solid var(--border-color);
+}
+
+.pagination-numbers {
+    display: flex;
+    gap: 0.25rem;
+}
+
+.pagination-link {
+    padding: 0.5rem 0.75rem;
+    border: 1px solid var(--border-color);
+    border-radius: 6px;
+    color: var(--text-primary);
+    text-decoration: none;
+    transition: all 0.2s;
+}
+
+.pagination-link:hover {
+    background: var(--hover-bg);
+}
+
+.pagination-link.active {
+    background: var(--primary-color);
+    color: white;
+    border-color: var(--primary-color);
+}
+
+@media (max-width: 1024px) {
+    .stats-grid {
+        grid-template-columns: repeat(2, 1fr);
+    }
+}
+
+@media (max-width: 640px) {
+    .stats-grid {
+        grid-template-columns: 1fr;
+    }
+    
+    .filters-bar {
+        flex-direction: column;
+        align-items: stretch;
+    }
+    
+    .search-box {
+        min-width: 100%;
+    }
+}
+</style>
+
+<script>
+function filterTenants() {
+    const search = document.getElementById('searchInput').value.toLowerCase();
+    const status = document.getElementById('statusFilter').value;
+    const plan = document.getElementById('planFilter').value;
+    
+    const rows = document.querySelectorAll('.tenant-row');
+    rows.forEach(row => {
+        const text = row.textContent.toLowerCase();
+        const matchesSearch = text.includes(search);
+        const rowStatus = row.querySelector('.badge')?.textContent.trim();
+        const matchesStatus = !status || rowStatus?.toLowerCase().includes(status.toLowerCase());
+        
+        if (matchesSearch && matchesStatus) {
+            row.style.display = '';
+        } else {
+            row.style.display = 'none';
+        }
+    });
+}
+
+function toggleSelectAll() {
+    const selectAll = document.getElementById('selectAll');
+    const checkboxes = document.querySelectorAll('.tenant-checkbox');
+    checkboxes.forEach(cb => cb.checked = selectAll.checked);
+}
+
+async function approveTenant(tenantId) {
+    if (!confirm('Approve this tenant?')) return;
+    
+    try {
+        await window.SaaSPlatform.apiRequest(`/api/admin/tenants/${tenantId}/approve/`, {
+            method: 'POST'
+        });
+        window.SaaSPlatform.showToast('Tenant approved', 'success');
+        location.reload();
+    } catch (error) {
+        window.SaaSPlatform.showToast('Failed to approve tenant', 'error');
+    }
+}
+
+async function rejectTenant(tenantId) {
+    if (!confirm('Reject this tenant? This action cannot be undone.')) return;
+    
+    try {
+        await window.SaaSPlatform.apiRequest(`/api/admin/tenants/${tenantId}/reject/`, {
+            method: 'POST'
+        });
+        window.SaaSPlatform.showToast('Tenant rejected', 'success');
+        location.reload();
+    } catch (error) {
+        window.SaaSPlatform.showToast('Failed to reject tenant', 'error');
+    }
+}
+
+async function suspendTenant(tenantId) {
+    if (!confirm('Suspend this tenant?')) return;
+    
+    try {
+        await window.SaaSPlatform.apiRequest(`/api/admin/tenants/${tenantId}/suspend/`, {
+            method: 'POST'
+        });
+        window.SaaSPlatform.showToast('Tenant suspended', 'success');
+        location.reload();
+    } catch (error) {
+        window.SaaSPlatform.showToast('Failed to suspend tenant', 'error');
+    }
+}
+
+async function activateTenant(tenantId) {
+    if (!confirm('Activate this tenant?')) return;
+    
+    try {
+        await window.SaaSPlatform.apiRequest(`/api/admin/tenants/${tenantId}/activate/`, {
+            method: 'POST'
+        });
+        window.SaaSPlatform.showToast('Tenant activated', 'success');
+        location.reload();
+    } catch (error) {
+        window.SaaSPlatform.showToast('Failed to activate tenant', 'error');
+    }
+}
+
+function exportTenants() {
+    window.open('/api/admin/tenants/export/', '_blank');
+}
+</script>
+{% endblock %}

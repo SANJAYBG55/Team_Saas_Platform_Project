@@ -1,0 +1,636 @@
+{% extends "layouts/app.html" %}
+{% load static %}
+
+{% block title %}Billing & Subscription - {{ block.super }}{% endblock %}
+
+{% block content %}
+<div class="page-header">
+    <div>
+        <h1 class="page-title">Billing & Subscription</h1>
+        <p class="page-subtitle">Manage your subscription and payment methods</p>
+    </div>
+</div>
+
+<!-- Current Plan Card -->
+<div class="billing-grid">
+    <div class="current-plan-card">
+        <div class="plan-badge-corner">
+            {% if subscription.is_trial %}
+            <span class="badge badge-warning">Trial</span>
+            {% elif subscription.plan.is_popular %}
+            <span class="badge badge-primary">Current Plan</span>
+            {% endif %}
+        </div>
+        
+        <h2 class="plan-name">{{ subscription.plan.name }}</h2>
+        <div class="plan-price">
+            <span class="price-currency">$</span>
+            <span class="price-amount">{{ subscription.plan.price|floatformat:0 }}</span>
+            <span class="price-period">/{{ subscription.plan.billing_interval|lower }}</span>
+        </div>
+        
+        {% if subscription.is_trial %}
+        <div class="trial-info">
+            <svg width="20" height="20" fill="none" stroke="var(--warning-color)" stroke-width="2">
+                <circle cx="10" cy="10" r="9"/>
+                <path d="M10 6v4M10 14h.01"/>
+            </svg>
+            <div>
+                <strong>Trial Period Active</strong>
+                <p>{{ subscription.trial_days_remaining }} days remaining</p>
+            </div>
+        </div>
+        {% else %}
+        <div class="subscription-info">
+            <div class="info-row">
+                <span>Status:</span>
+                <span class="badge badge-{{ subscription.status|lower }}">{{ subscription.get_status_display }}</span>
+            </div>
+            <div class="info-row">
+                <span>Next billing date:</span>
+                <strong>{{ subscription.current_period_end|date:"M d, Y" }}</strong>
+            </div>
+            <div class="info-row">
+                <span>Amount:</span>
+                <strong>${{ subscription.plan.price }}</strong>
+            </div>
+        </div>
+        {% endif %}
+        
+        <div class="plan-actions">
+            <button class="btn btn-secondary btn-block" onclick="openModal('changePlanModal')">Change Plan</button>
+            {% if not subscription.is_trial %}
+            <button class="btn btn-outline btn-block" onclick="cancelSubscription()">Cancel Subscription</button>
+            {% endif %}
+        </div>
+    </div>
+
+    <!-- Usage Stats -->
+    <div class="usage-card">
+        <h3 class="card-title">Usage This Month</h3>
+        
+        <div class="usage-item">
+            <div class="usage-header">
+                <span class="usage-label">Team Members</span>
+                <span class="usage-value">{{ tenant.members_count }} / {{ subscription.plan.max_users }}</span>
+            </div>
+            <div class="progress-bar">
+                <div class="progress-fill" style="width: {{ tenant.members_percentage }}%;"></div>
+            </div>
+        </div>
+
+        <div class="usage-item">
+            <div class="usage-header">
+                <span class="usage-label">Teams</span>
+                <span class="usage-value">{{ tenant.teams_count }} / {{ subscription.plan.max_teams }}</span>
+            </div>
+            <div class="progress-bar">
+                <div class="progress-fill" style="width: {{ tenant.teams_percentage }}%;"></div>
+            </div>
+        </div>
+
+        <div class="usage-item">
+            <div class="usage-header">
+                <span class="usage-label">Storage</span>
+                <span class="usage-value">{{ tenant.storage_used_gb|floatformat:1 }}GB / {{ subscription.plan.max_storage_gb }}GB</span>
+            </div>
+            <div class="progress-bar">
+                <div class="progress-fill" style="width: {{ tenant.storage_percentage }}%;"></div>
+            </div>
+        </div>
+
+        {% if tenant.is_near_limit %}
+        <div class="usage-warning">
+            <svg width="16" height="16" fill="none" stroke="var(--warning-color)" stroke-width="2">
+                <path d="M10.29 3.86L1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0z"/>
+                <path d="M12 9v4M12 17h.01"/>
+            </svg>
+            <p>You're approaching your plan limits. Consider upgrading.</p>
+        </div>
+        {% endif %}
+    </div>
+</div>
+
+<!-- Available Plans -->
+<div class="section-header">
+    <h2 class="section-title">Available Plans</h2>
+    <p class="section-subtitle">Choose the plan that best fits your needs</p>
+</div>
+
+<div class="plans-grid">
+    {% for plan in available_plans %}
+    <div class="plan-card {% if plan.is_popular %}popular{% endif %} {% if plan.id == subscription.plan.id %}current{% endif %}">
+        {% if plan.is_popular %}
+        <div class="popular-badge">Most Popular</div>
+        {% endif %}
+        
+        <h3 class="plan-name">{{ plan.name }}</h3>
+        <p class="plan-description">{{ plan.description }}</p>
+        
+        <div class="plan-price">
+            <span class="price-currency">$</span>
+            <span class="price-amount">{{ plan.price|floatformat:0 }}</span>
+            <span class="price-period">/{{ plan.billing_interval|lower }}</span>
+        </div>
+        
+        <ul class="plan-features">
+            <li>
+                <svg width="16" height="16" fill="none" stroke="var(--success-color)" stroke-width="2">
+                    <path d="M20 6L9 17l-5-5"/>
+                </svg>
+                {% if plan.max_users == 999 %}Unlimited{% else %}Up to {{ plan.max_users }}{% endif %} users
+            </li>
+            <li>
+                <svg width="16" height="16" fill="none" stroke="var(--success-color)" stroke-width="2">
+                    <path d="M20 6L9 17l-5-5"/>
+                </svg>
+                {% if plan.max_teams == 999 %}Unlimited{% else %}{{ plan.max_teams }}{% endif %} teams
+            </li>
+            <li>
+                <svg width="16" height="16" fill="none" stroke="var(--success-color)" stroke-width="2">
+                    <path d="M20 6L9 17l-5-5"/>
+                </svg>
+                {{ plan.max_storage_gb }}GB storage
+            </li>
+            {% if plan.enable_advanced_reports %}
+            <li>
+                <svg width="16" height="16" fill="none" stroke="var(--success-color)" stroke-width="2">
+                    <path d="M20 6L9 17l-5-5"/>
+                </svg>
+                Advanced reports
+            </li>
+            {% endif %}
+            {% if plan.enable_priority_support %}
+            <li>
+                <svg width="16" height="16" fill="none" stroke="var(--success-color)" stroke-width="2">
+                    <path d="M20 6L9 17l-5-5"/>
+                </svg>
+                Priority support
+            </li>
+            {% endif %}
+            {% if plan.enable_api_access %}
+            <li>
+                <svg width="16" height="16" fill="none" stroke="var(--success-color)" stroke-width="2">
+                    <path d="M20 6L9 17l-5-5"/>
+                </svg>
+                API access
+            </li>
+            {% endif %}
+            {% if plan.enable_custom_branding %}
+            <li>
+                <svg width="16" height="16" fill="none" stroke="var(--success-color)" stroke-width="2">
+                    <path d="M20 6L9 17l-5-5"/>
+                </svg>
+                Custom branding
+            </li>
+            {% endif %}
+        </ul>
+        
+        {% if plan.id == subscription.plan.id %}
+        <button class="btn btn-secondary btn-block" disabled>Current Plan</button>
+        {% else %}
+        <button class="btn btn-primary btn-block" onclick="selectPlan('{{ plan.id }}')">
+            {% if plan.price > subscription.plan.price %}Upgrade{% else %}Downgrade{% endif %}
+        </button>
+        {% endif %}
+    </div>
+    {% endfor %}
+</div>
+
+<!-- Payment History -->
+<div class="content-card">
+    <div class="card-header">
+        <h2 class="card-title">Payment History</h2>
+        <button class="btn btn-sm btn-secondary" onclick="downloadInvoices()">
+            <svg width="16" height="16" fill="none" stroke="currentColor" stroke-width="2">
+                <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4M7 10l5 5 5-5M12 15V3"/>
+            </svg>
+            Download All
+        </button>
+    </div>
+    <div class="table-container">
+        <table class="data-table">
+            <thead>
+                <tr>
+                    <th>Invoice #</th>
+                    <th>Date</th>
+                    <th>Description</th>
+                    <th>Amount</th>
+                    <th>Status</th>
+                    <th>Actions</th>
+                </tr>
+            </thead>
+            <tbody>
+                {% for payment in payment_history %}
+                <tr>
+                    <td>#{{ payment.id|stringformat:"05d" }}</td>
+                    <td>{{ payment.created_at|date:"M d, Y" }}</td>
+                    <td>{{ payment.description|default:"Subscription payment" }}</td>
+                    <td>${{ payment.amount }}</td>
+                    <td>
+                        <span class="badge badge-{{ payment.status|lower }}">{{ payment.get_status_display }}</span>
+                    </td>
+                    <td>
+                        <button class="btn-icon" title="Download Invoice" onclick="downloadInvoice('{{ payment.id }}')">
+                            <svg width="16" height="16" fill="none" stroke="currentColor" stroke-width="2">
+                                <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4M7 10l5 5 5-5M12 15V3"/>
+                            </svg>
+                        </button>
+                    </td>
+                </tr>
+                {% empty %}
+                <tr>
+                    <td colspan="6" class="empty-state">No payment history</td>
+                </tr>
+                {% endfor %}
+            </tbody>
+        </table>
+    </div>
+</div>
+
+<!-- Payment Method -->
+<div class="content-card">
+    <div class="card-header">
+        <h2 class="card-title">Payment Method</h2>
+        <button class="btn btn-sm btn-secondary" onclick="openModal('addPaymentMethodModal')">
+            <svg width="16" height="16" fill="none" stroke="currentColor" stroke-width="2">
+                <path d="M12 5v14M5 12h14"/>
+            </svg>
+            Add Method
+        </button>
+    </div>
+    <div class="payment-methods">
+        {% for method in payment_methods %}
+        <div class="payment-method-card">
+            <div class="method-icon">
+                <svg width="32" height="32" fill="none" stroke="currentColor" stroke-width="2">
+                    <rect x="1" y="4" width="22" height="16" rx="2"/>
+                    <path d="M1 10h22"/>
+                </svg>
+            </div>
+            <div class="method-info">
+                <div class="method-name">{{ method.type }} •••• {{ method.last4 }}</div>
+                <div class="method-expiry">Expires {{ method.exp_month }}/{{ method.exp_year }}</div>
+            </div>
+            {% if method.is_default %}
+            <span class="badge badge-primary">Default</span>
+            {% else %}
+            <button class="btn btn-sm btn-secondary" onclick="setDefaultMethod('{{ method.id }}')">Set Default</button>
+            {% endif %}
+            <button class="btn-icon text-error" onclick="removeMethod('{{ method.id }}')">
+                <svg width="16" height="16" fill="none" stroke="currentColor" stroke-width="2">
+                    <path d="M3 6h18M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"/>
+                </svg>
+            </button>
+        </div>
+        {% empty %}
+        <div class="empty-state">
+            <p>No payment methods added</p>
+            <button class="btn btn-sm btn-primary" onclick="openModal('addPaymentMethodModal')">Add Payment Method</button>
+        </div>
+        {% endfor %}
+    </div>
+</div>
+
+<style>
+.billing-grid {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 1.5rem;
+    margin-bottom: 3rem;
+}
+
+.current-plan-card {
+    background: linear-gradient(135deg, var(--primary-color) 0%, var(--primary-dark) 100%);
+    color: white;
+    border-radius: 16px;
+    padding: 2rem;
+    position: relative;
+    overflow: hidden;
+}
+
+.current-plan-card::before {
+    content: '';
+    position: absolute;
+    top: -50%;
+    right: -50%;
+    width: 200%;
+    height: 200%;
+    background: radial-gradient(circle, rgba(255,255,255,0.1) 0%, transparent 70%);
+}
+
+.plan-badge-corner {
+    position: absolute;
+    top: 1rem;
+    right: 1rem;
+}
+
+.plan-name {
+    font-size: 1.5rem;
+    font-weight: 700;
+    margin-bottom: 1rem;
+}
+
+.plan-price {
+    display: flex;
+    align-items: baseline;
+    margin-bottom: 1.5rem;
+}
+
+.price-currency {
+    font-size: 1.5rem;
+    opacity: 0.8;
+}
+
+.price-amount {
+    font-size: 3rem;
+    font-weight: 700;
+}
+
+.price-period {
+    font-size: 1.125rem;
+    opacity: 0.8;
+    margin-left: 0.5rem;
+}
+
+.trial-info,
+.subscription-info {
+    background: rgba(255, 255, 255, 0.1);
+    border-radius: 12px;
+    padding: 1rem;
+    margin-bottom: 1.5rem;
+}
+
+.trial-info {
+    display: flex;
+    gap: 1rem;
+    align-items: flex-start;
+}
+
+.trial-info strong {
+    display: block;
+    margin-bottom: 0.25rem;
+}
+
+.subscription-info {
+    display: flex;
+    flex-direction: column;
+    gap: 0.75rem;
+}
+
+.info-row {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+}
+
+.plan-actions {
+    display: flex;
+    flex-direction: column;
+    gap: 0.75rem;
+}
+
+.btn-outline {
+    border: 2px solid rgba(255, 255, 255, 0.5);
+    background: transparent;
+    color: white;
+}
+
+.btn-outline:hover {
+    background: rgba(255, 255, 255, 0.1);
+}
+
+.usage-card {
+    background: var(--card-bg);
+    border: 1px solid var(--border-color);
+    border-radius: 16px;
+    padding: 2rem;
+}
+
+.usage-item {
+    margin-bottom: 1.5rem;
+}
+
+.usage-item:last-child {
+    margin-bottom: 0;
+}
+
+.usage-header {
+    display: flex;
+    justify-content: space-between;
+    margin-bottom: 0.5rem;
+}
+
+.usage-label {
+    font-weight: 500;
+    color: var(--text-primary);
+}
+
+.usage-value {
+    font-weight: 600;
+    color: var(--text-secondary);
+}
+
+.progress-bar {
+    height: 8px;
+    background: var(--hover-bg);
+    border-radius: 4px;
+    overflow: hidden;
+}
+
+.progress-fill {
+    height: 100%;
+    background: var(--primary-color);
+    border-radius: 4px;
+    transition: width 0.3s;
+}
+
+.usage-warning {
+    display: flex;
+    gap: 0.75rem;
+    padding: 1rem;
+    background: rgba(245, 158, 11, 0.1);
+    border: 1px solid rgba(245, 158, 11, 0.2);
+    border-radius: 8px;
+    margin-top: 1.5rem;
+}
+
+.usage-warning p {
+    color: var(--text-secondary);
+    font-size: 0.875rem;
+}
+
+.section-header {
+    text-align: center;
+    margin-bottom: 2rem;
+}
+
+.section-title {
+    font-size: 2rem;
+    font-weight: 700;
+    color: var(--text-primary);
+    margin-bottom: 0.5rem;
+}
+
+.section-subtitle {
+    color: var(--text-secondary);
+}
+
+.plans-grid {
+    display: grid;
+    grid-template-columns: repeat(3, 1fr);
+    gap: 1.5rem;
+    margin-bottom: 3rem;
+}
+
+.plan-card {
+    background: var(--card-bg);
+    border: 2px solid var(--border-color);
+    border-radius: 16px;
+    padding: 2rem;
+    transition: all 0.3s;
+    position: relative;
+}
+
+.plan-card.popular {
+    border-color: var(--primary-color);
+    box-shadow: 0 8px 24px rgba(37, 99, 235, 0.15);
+}
+
+.plan-card.current {
+    border-color: var(--success-color);
+}
+
+.plan-card:hover {
+    transform: translateY(-4px);
+    box-shadow: 0 12px 32px rgba(0, 0, 0, 0.1);
+}
+
+.plan-card .plan-name {
+    font-size: 1.5rem;
+    color: var(--text-primary);
+    margin-bottom: 0.5rem;
+}
+
+.plan-description {
+    color: var(--text-secondary);
+    margin-bottom: 1.5rem;
+}
+
+.plan-card .plan-price {
+    margin-bottom: 2rem;
+    color: var(--text-primary);
+}
+
+.plan-features {
+    list-style: none;
+    padding: 0;
+    margin: 0 0 2rem 0;
+}
+
+.plan-features li {
+    display: flex;
+    align-items: center;
+    gap: 0.75rem;
+    padding: 0.5rem 0;
+    color: var(--text-secondary);
+}
+
+.payment-methods {
+    display: flex;
+    flex-direction: column;
+    gap: 1rem;
+}
+
+.payment-method-card {
+    display: flex;
+    align-items: center;
+    gap: 1rem;
+    padding: 1rem;
+    border: 1px solid var(--border-color);
+    border-radius: 8px;
+}
+
+.method-icon {
+    color: var(--text-secondary);
+}
+
+.method-info {
+    flex: 1;
+}
+
+.method-name {
+    font-weight: 500;
+    color: var(--text-primary);
+}
+
+.method-expiry {
+    font-size: 0.875rem;
+    color: var(--text-secondary);
+}
+
+@media (max-width: 1024px) {
+    .billing-grid,
+    .plans-grid {
+        grid-template-columns: 1fr;
+    }
+}
+</style>
+
+<script>
+function selectPlan(planId) {
+    // Open confirmation modal or redirect to checkout
+    window.location.href = `/billing/change-plan/${planId}/`;
+}
+
+async function cancelSubscription() {
+    if (!confirm('Are you sure you want to cancel your subscription? Your account will remain active until the end of the billing period.')) {
+        return;
+    }
+    
+    try {
+        await window.SaaSPlatform.apiRequest('/api/subscriptions/cancel/', {
+            method: 'POST'
+        });
+        window.SaaSPlatform.showToast('Subscription cancelled', 'success');
+        location.reload();
+    } catch (error) {
+        window.SaaSPlatform.showToast('Failed to cancel subscription', 'error');
+    }
+}
+
+function downloadInvoice(paymentId) {
+    window.open(`/api/payments/${paymentId}/invoice/`, '_blank');
+}
+
+function downloadInvoices() {
+    window.open('/api/payments/invoices/download/', '_blank');
+}
+
+async function removeMethod(methodId) {
+    if (!confirm('Remove this payment method?')) return;
+    
+    try {
+        await window.SaaSPlatform.apiRequest(`/api/payment-methods/${methodId}/`, {
+            method: 'DELETE'
+        });
+        window.SaaSPlatform.showToast('Payment method removed', 'success');
+        location.reload();
+    } catch (error) {
+        window.SaaSPlatform.showToast('Failed to remove method', 'error');
+    }
+}
+
+async function setDefaultMethod(methodId) {
+    try {
+        await window.SaaSPlatform.apiRequest(`/api/payment-methods/${methodId}/set-default/`, {
+            method: 'POST'
+        });
+        window.SaaSPlatform.showToast('Default payment method updated', 'success');
+        location.reload();
+    } catch (error) {
+        window.SaaSPlatform.showToast('Failed to update', 'error');
+    }
+}
+</script>
+{% endblock %}

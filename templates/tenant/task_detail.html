@@ -1,0 +1,815 @@
+{% extends "layouts/app.html" %}
+{% load static %}
+
+{% block title %}{{ task.title }} - {{ block.super }}{% endblock %}
+
+{% block content %}
+<div class="task-detail-header">
+    <div class="header-top">
+        <button class="btn-text" onclick="window.history.back()">
+            <svg width="16" height="16" fill="none" stroke="currentColor" stroke-width="2">
+                <path d="M19 12H5M12 19l-7-7 7-7"/>
+            </svg>
+            Back to Tasks
+        </button>
+        <div class="header-actions">
+            <button class="btn btn-sm btn-secondary" onclick="openModal('shareTaskModal')">
+                <svg width="16" height="16" fill="none" stroke="currentColor" stroke-width="2">
+                    <circle cx="18" cy="5" r="3"/>
+                    <circle cx="6" cy="12" r="3"/>
+                    <circle cx="18" cy="19" r="3"/>
+                    <path d="M8.59 13.51l6.83 3.98M15.41 6.51l-6.82 3.98"/>
+                </svg>
+                Share
+            </button>
+            <button class="btn-icon" onclick="openTaskMenu()">
+                <svg width="16" height="16" fill="none" stroke="currentColor" stroke-width="2">
+                    <circle cx="12" cy="5" r="1"/>
+                    <circle cx="12" cy="12" r="1"/>
+                    <circle cx="12" cy="19" r="1"/>
+                </svg>
+            </button>
+        </div>
+    </div>
+
+    <div class="task-meta">
+        <span class="priority-badge priority-{{ task.priority|lower }}">{{ task.get_priority_display }}</span>
+        <span class="status-badge status-{{ task.status|lower }}">{{ task.get_status_display }}</span>
+        <span class="task-id">#{{ task.id }}</span>
+    </div>
+
+    <h1 class="task-title" contenteditable="true" id="taskTitle" onblur="updateTaskTitle()">{{ task.title }}</h1>
+</div>
+
+<div class="task-detail-layout">
+    <!-- Main Content -->
+    <div class="task-main-content">
+        <!-- Description -->
+        <section class="detail-section">
+            <div class="section-header">
+                <h2 class="section-title">Description</h2>
+                <button class="btn-text" onclick="toggleEditDescription()">
+                    <svg width="16" height="16" fill="none" stroke="currentColor" stroke-width="2">
+                        <path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"/>
+                        <path d="M18.5 2.5a2.12 2.12 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"/>
+                    </svg>
+                    Edit
+                </button>
+            </div>
+            <div id="descriptionView" class="description-content">
+                {{ task.description|default:"No description provided." }}
+            </div>
+            <div id="descriptionEdit" class="description-edit" style="display: none;">
+                <textarea id="descriptionTextarea" rows="5">{{ task.description }}</textarea>
+                <div class="edit-actions">
+                    <button class="btn btn-sm btn-primary" onclick="saveDescription()">Save</button>
+                    <button class="btn btn-sm btn-secondary" onclick="cancelEditDescription()">Cancel</button>
+                </div>
+            </div>
+        </section>
+
+        <!-- Attachments -->
+        <section class="detail-section">
+            <div class="section-header">
+                <h2 class="section-title">Attachments ({{ task.attachments.count }})</h2>
+                <button class="btn-text" onclick="document.getElementById('fileInput').click()">
+                    <svg width="16" height="16" fill="none" stroke="currentColor" stroke-width="2">
+                        <path d="M12 5v14M5 12h14"/>
+                    </svg>
+                    Upload
+                </button>
+                <input type="file" id="fileInput" multiple style="display: none;" onchange="uploadFiles()">
+            </div>
+            <div class="attachments-grid">
+                {% for attachment in task.attachments.all %}
+                <div class="attachment-card">
+                    <div class="attachment-icon">
+                        {% if attachment.is_image %}
+                        <img src="{{ attachment.file.url }}" alt="{{ attachment.filename }}">
+                        {% else %}
+                        <svg width="32" height="32" fill="none" stroke="currentColor" stroke-width="2">
+                            <path d="M13 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V9z"/>
+                            <polyline points="13 2 13 9 20 9"/>
+                        </svg>
+                        {% endif %}
+                    </div>
+                    <div class="attachment-info">
+                        <div class="attachment-name">{{ attachment.filename }}</div>
+                        <div class="attachment-meta">{{ attachment.file_size_display }} • {{ attachment.uploaded_at|date:"M d, Y" }}</div>
+                    </div>
+                    <div class="attachment-actions">
+                        <a href="{{ attachment.file.url }}" target="_blank" class="btn-icon" title="Download">
+                            <svg width="16" height="16" fill="none" stroke="currentColor" stroke-width="2">
+                                <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4M7 10l5 5 5-5M12 15V3"/>
+                            </svg>
+                        </a>
+                        <button class="btn-icon text-error" onclick="deleteAttachment('{{ attachment.id }}')" title="Delete">
+                            <svg width="16" height="16" fill="none" stroke="currentColor" stroke-width="2">
+                                <path d="M3 6h18M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"/>
+                            </svg>
+                        </button>
+                    </div>
+                </div>
+                {% empty %}
+                <div class="empty-state-small">No attachments</div>
+                {% endfor %}
+            </div>
+        </section>
+
+        <!-- Comments -->
+        <section class="detail-section">
+            <div class="section-header">
+                <h2 class="section-title">Comments ({{ task.comments.count }})</h2>
+            </div>
+            
+            <div class="comment-form">
+                <div class="user-avatar">{{ user.get_initials }}</div>
+                <div class="comment-input-wrapper">
+                    <textarea id="commentInput" placeholder="Add a comment..." rows="2"></textarea>
+                    <button class="btn btn-sm btn-primary" onclick="addComment()">Comment</button>
+                </div>
+            </div>
+
+            <div class="comments-list">
+                {% for comment in task.comments.all %}
+                <div class="comment-item">
+                    <div class="user-avatar">{{ comment.created_by.get_initials }}</div>
+                    <div class="comment-content">
+                        <div class="comment-header">
+                            <strong>{{ comment.created_by.get_full_name }}</strong>
+                            <span class="comment-time">{{ comment.created_at|timesince }} ago</span>
+                        </div>
+                        <div class="comment-text">{{ comment.content }}</div>
+                        {% if comment.created_by == user %}
+                        <div class="comment-actions">
+                            <button class="btn-text-sm" onclick="editComment('{{ comment.id }}')">Edit</button>
+                            <button class="btn-text-sm text-error" onclick="deleteComment('{{ comment.id }}')">Delete</button>
+                        </div>
+                        {% endif %}
+                    </div>
+                </div>
+                {% empty %}
+                <div class="empty-state-small">No comments yet. Start the conversation!</div>
+                {% endfor %}
+            </div>
+        </section>
+
+        <!-- Activity Timeline -->
+        <section class="detail-section">
+            <div class="section-header">
+                <h2 class="section-title">Activity</h2>
+            </div>
+            <div class="activity-timeline">
+                {% for activity in task.activities.all %}
+                <div class="timeline-item">
+                    <div class="timeline-dot"></div>
+                    <div class="timeline-content">
+                        <div class="activity-text">
+                            <strong>{{ activity.user.get_full_name }}</strong> {{ activity.get_description }}
+                        </div>
+                        <div class="activity-time">{{ activity.created_at|timesince }} ago</div>
+                    </div>
+                </div>
+                {% endfor %}
+            </div>
+        </section>
+    </div>
+
+    <!-- Sidebar -->
+    <div class="task-sidebar">
+        <div class="sidebar-section">
+            <label class="sidebar-label">Status</label>
+            <select class="sidebar-select" id="statusSelect" onchange="updateTaskField('status', this.value)">
+                <option value="TODO" {% if task.status == 'TODO' %}selected{% endif %}>To Do</option>
+                <option value="IN_PROGRESS" {% if task.status == 'IN_PROGRESS' %}selected{% endif %}>In Progress</option>
+                <option value="REVIEW" {% if task.status == 'REVIEW' %}selected{% endif %}>Review</option>
+                <option value="COMPLETED" {% if task.status == 'COMPLETED' %}selected{% endif %}>Completed</option>
+            </select>
+        </div>
+
+        <div class="sidebar-section">
+            <label class="sidebar-label">Priority</label>
+            <select class="sidebar-select" id="prioritySelect" onchange="updateTaskField('priority', this.value)">
+                <option value="LOW" {% if task.priority == 'LOW' %}selected{% endif %}>Low</option>
+                <option value="MEDIUM" {% if task.priority == 'MEDIUM' %}selected{% endif %}>Medium</option>
+                <option value="HIGH" {% if task.priority == 'HIGH' %}selected{% endif %}>High</option>
+            </select>
+        </div>
+
+        <div class="sidebar-section">
+            <label class="sidebar-label">Assignee</label>
+            <select class="sidebar-select" id="assigneeSelect" onchange="updateTaskField('assigned_to', this.value)">
+                <option value="">Unassigned</option>
+                {% for member in task.team.members.all %}
+                <option value="{{ member.user.id }}" {% if task.assigned_to.id == member.user.id %}selected{% endif %}>
+                    {{ member.user.get_full_name }}
+                </option>
+                {% endfor %}
+            </select>
+        </div>
+
+        <div class="sidebar-section">
+            <label class="sidebar-label">Due Date</label>
+            <input type="date" class="sidebar-input" id="dueDateInput" value="{{ task.due_date|date:'Y-m-d' }}" 
+                   onchange="updateTaskField('due_date', this.value)">
+        </div>
+
+        <div class="sidebar-section">
+            <label class="sidebar-label">Labels</label>
+            <div class="labels-container">
+                {% for label in task.labels.all %}
+                <span class="label-tag" style="background: {{ label.color }}20; color: {{ label.color }}">
+                    {{ label.name }}
+                    <button class="label-remove" onclick="removeLabel('{{ label.id }}')">×</button>
+                </span>
+                {% endfor %}
+                <button class="btn-text-sm" onclick="openModal('addLabelModal')">+ Add Label</button>
+            </div>
+        </div>
+
+        <div class="sidebar-section">
+            <label class="sidebar-label">Team</label>
+            <div class="sidebar-value">
+                <a href="/teams/{{ task.team.id }}/" class="team-link">{{ task.team.name }}</a>
+            </div>
+        </div>
+
+        <div class="sidebar-section">
+            <label class="sidebar-label">Created</label>
+            <div class="sidebar-value">
+                {{ task.created_at|date:"M d, Y" }}<br>
+                <small>by {{ task.created_by.get_full_name }}</small>
+            </div>
+        </div>
+
+        <div class="sidebar-section">
+            <label class="sidebar-label">Last Updated</label>
+            <div class="sidebar-value">{{ task.updated_at|timesince }} ago</div>
+        </div>
+
+        <div class="sidebar-actions">
+            <button class="btn btn-sm btn-outline btn-block" onclick="duplicateTask()">
+                <svg width="16" height="16" fill="none" stroke="currentColor" stroke-width="2">
+                    <rect x="9" y="9" width="13" height="13" rx="2"/>
+                    <path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"/>
+                </svg>
+                Duplicate
+            </button>
+            <button class="btn btn-sm btn-outline btn-block text-error" onclick="deleteTask()">
+                <svg width="16" height="16" fill="none" stroke="currentColor" stroke-width="2">
+                    <path d="M3 6h18M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"/>
+                </svg>
+                Delete Task
+            </button>
+        </div>
+    </div>
+</div>
+
+<style>
+.task-detail-header {
+    margin-bottom: 2rem;
+}
+
+.header-top {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    margin-bottom: 1rem;
+}
+
+.header-actions {
+    display: flex;
+    gap: 0.5rem;
+}
+
+.task-meta {
+    display: flex;
+    gap: 0.75rem;
+    margin-bottom: 1rem;
+    align-items: center;
+}
+
+.priority-badge,
+.status-badge {
+    padding: 0.25rem 0.75rem;
+    border-radius: 12px;
+    font-size: 0.875rem;
+    font-weight: 500;
+}
+
+.priority-low { background: var(--success-light); color: var(--success-color); }
+.priority-medium { background: var(--warning-light); color: var(--warning-color); }
+.priority-high { background: var(--error-light); color: var(--error-color); }
+
+.status-todo { background: #e5e7eb; color: #374151; }
+.status-in_progress { background: #dbeafe; color: #1e40af; }
+.status-review { background: #fef3c7; color: #92400e; }
+.status-completed { background: #d1fae5; color: #065f46; }
+
+.task-id {
+    color: var(--text-secondary);
+    font-size: 0.875rem;
+}
+
+.task-title {
+    font-size: 2rem;
+    font-weight: 700;
+    color: var(--text-primary);
+    border: 2px solid transparent;
+    padding: 0.25rem 0.5rem;
+    margin: -0.25rem -0.5rem;
+    border-radius: 4px;
+}
+
+.task-title:focus {
+    outline: none;
+    border-color: var(--primary-color);
+    background: var(--hover-bg);
+}
+
+.task-detail-layout {
+    display: grid;
+    grid-template-columns: 1fr 320px;
+    gap: 2rem;
+}
+
+.task-main-content {
+    display: flex;
+    flex-direction: column;
+    gap: 2rem;
+}
+
+.detail-section {
+    background: var(--card-bg);
+    border: 1px solid var(--border-color);
+    border-radius: 12px;
+    padding: 1.5rem;
+}
+
+.section-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    margin-bottom: 1rem;
+}
+
+.section-title {
+    font-size: 1.125rem;
+    font-weight: 600;
+    color: var(--text-primary);
+}
+
+.description-content {
+    color: var(--text-secondary);
+    line-height: 1.6;
+    white-space: pre-wrap;
+}
+
+.description-edit textarea {
+    width: 100%;
+    padding: 0.75rem;
+    border: 1px solid var(--border-color);
+    border-radius: 6px;
+    font-family: inherit;
+    resize: vertical;
+    margin-bottom: 0.75rem;
+}
+
+.edit-actions {
+    display: flex;
+    gap: 0.5rem;
+}
+
+.attachments-grid {
+    display: grid;
+    gap: 0.75rem;
+}
+
+.attachment-card {
+    display: flex;
+    align-items: center;
+    gap: 1rem;
+    padding: 0.75rem;
+    border: 1px solid var(--border-color);
+    border-radius: 8px;
+    transition: background 0.2s;
+}
+
+.attachment-card:hover {
+    background: var(--hover-bg);
+}
+
+.attachment-icon {
+    width: 48px;
+    height: 48px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    border-radius: 6px;
+    background: var(--hover-bg);
+    overflow: hidden;
+    flex-shrink: 0;
+}
+
+.attachment-icon img {
+    width: 100%;
+    height: 100%;
+    object-fit: cover;
+}
+
+.attachment-info {
+    flex: 1;
+}
+
+.attachment-name {
+    font-weight: 500;
+    color: var(--text-primary);
+    margin-bottom: 0.25rem;
+}
+
+.attachment-meta {
+    font-size: 0.875rem;
+    color: var(--text-secondary);
+}
+
+.attachment-actions {
+    display: flex;
+    gap: 0.25rem;
+}
+
+.comment-form {
+    display: flex;
+    gap: 1rem;
+    margin-bottom: 1.5rem;
+}
+
+.comment-input-wrapper {
+    flex: 1;
+    display: flex;
+    flex-direction: column;
+    gap: 0.5rem;
+}
+
+.comment-input-wrapper textarea {
+    width: 100%;
+    padding: 0.75rem;
+    border: 1px solid var(--border-color);
+    border-radius: 6px;
+    resize: vertical;
+    font-family: inherit;
+}
+
+.comments-list {
+    display: flex;
+    flex-direction: column;
+    gap: 1.5rem;
+}
+
+.comment-item {
+    display: flex;
+    gap: 1rem;
+}
+
+.comment-content {
+    flex: 1;
+}
+
+.comment-header {
+    display: flex;
+    align-items: center;
+    gap: 0.5rem;
+    margin-bottom: 0.5rem;
+}
+
+.comment-time {
+    font-size: 0.875rem;
+    color: var(--text-secondary);
+}
+
+.comment-text {
+    color: var(--text-secondary);
+    line-height: 1.5;
+    margin-bottom: 0.5rem;
+}
+
+.comment-actions {
+    display: flex;
+    gap: 1rem;
+}
+
+.activity-timeline {
+    position: relative;
+    padding-left: 2rem;
+}
+
+.timeline-item {
+    position: relative;
+    padding-bottom: 1.5rem;
+}
+
+.timeline-item:last-child {
+    padding-bottom: 0;
+}
+
+.timeline-dot {
+    position: absolute;
+    left: -2rem;
+    top: 0.25rem;
+    width: 10px;
+    height: 10px;
+    border-radius: 50%;
+    background: var(--primary-color);
+    border: 2px solid var(--card-bg);
+}
+
+.timeline-item::before {
+    content: '';
+    position: absolute;
+    left: calc(-2rem + 4px);
+    top: 0.25rem;
+    bottom: -1.5rem;
+    width: 2px;
+    background: var(--border-color);
+}
+
+.timeline-item:last-child::before {
+    display: none;
+}
+
+.activity-text {
+    color: var(--text-primary);
+    margin-bottom: 0.25rem;
+}
+
+.activity-time {
+    font-size: 0.875rem;
+    color: var(--text-secondary);
+}
+
+.task-sidebar {
+    background: var(--card-bg);
+    border: 1px solid var(--border-color);
+    border-radius: 12px;
+    padding: 1.5rem;
+    height: fit-content;
+    position: sticky;
+    top: 80px;
+}
+
+.sidebar-section {
+    padding-bottom: 1.5rem;
+    margin-bottom: 1.5rem;
+    border-bottom: 1px solid var(--border-color);
+}
+
+.sidebar-section:last-of-type {
+    border-bottom: none;
+}
+
+.sidebar-label {
+    display: block;
+    font-size: 0.875rem;
+    font-weight: 600;
+    color: var(--text-secondary);
+    margin-bottom: 0.5rem;
+}
+
+.sidebar-select,
+.sidebar-input {
+    width: 100%;
+    padding: 0.5rem;
+    border: 1px solid var(--border-color);
+    border-radius: 6px;
+    background: var(--body-bg);
+}
+
+.sidebar-value {
+    color: var(--text-primary);
+    font-size: 0.875rem;
+}
+
+.team-link {
+    color: var(--primary-color);
+    text-decoration: none;
+}
+
+.team-link:hover {
+    text-decoration: underline;
+}
+
+.labels-container {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 0.5rem;
+}
+
+.label-tag {
+    display: inline-flex;
+    align-items: center;
+    gap: 0.25rem;
+    padding: 0.25rem 0.5rem;
+    border-radius: 4px;
+    font-size: 0.875rem;
+}
+
+.label-remove {
+    background: none;
+    border: none;
+    cursor: pointer;
+    padding: 0;
+    font-size: 1.25rem;
+    line-height: 1;
+    opacity: 0.7;
+}
+
+.label-remove:hover {
+    opacity: 1;
+}
+
+.sidebar-actions {
+    display: flex;
+    flex-direction: column;
+    gap: 0.5rem;
+    padding-top: 1rem;
+    border-top: 1px solid var(--border-color);
+}
+
+.empty-state-small {
+    text-align: center;
+    color: var(--text-secondary);
+    padding: 2rem;
+}
+
+@media (max-width: 1024px) {
+    .task-detail-layout {
+        grid-template-columns: 1fr;
+    }
+    
+    .task-sidebar {
+        position: static;
+    }
+}
+</style>
+
+<script>
+async function updateTaskTitle() {
+    const title = document.getElementById('taskTitle').textContent.trim();
+    if (!title) {
+        window.SaaSPlatform.showToast('Title cannot be empty', 'error');
+        document.getElementById('taskTitle').textContent = '{{ task.title }}';
+        return;
+    }
+    
+    try {
+        await window.SaaSPlatform.apiRequest('/api/tasks/{{ task.id }}/', {
+            method: 'PATCH',
+            body: JSON.stringify({ title })
+        });
+        window.SaaSPlatform.showToast('Title updated', 'success');
+    } catch (error) {
+        window.SaaSPlatform.showToast('Failed to update title', 'error');
+    }
+}
+
+function toggleEditDescription() {
+    document.getElementById('descriptionView').style.display = 'none';
+    document.getElementById('descriptionEdit').style.display = 'block';
+}
+
+function cancelEditDescription() {
+    document.getElementById('descriptionView').style.display = 'block';
+    document.getElementById('descriptionEdit').style.display = 'none';
+}
+
+async function saveDescription() {
+    const description = document.getElementById('descriptionTextarea').value;
+    try {
+        await window.SaaSPlatform.apiRequest('/api/tasks/{{ task.id }}/', {
+            method: 'PATCH',
+            body: JSON.stringify({ description })
+        });
+        document.getElementById('descriptionView').textContent = description || 'No description provided.';
+        cancelEditDescription();
+        window.SaaSPlatform.showToast('Description updated', 'success');
+    } catch (error) {
+        window.SaaSPlatform.showToast('Failed to update description', 'error');
+    }
+}
+
+async function updateTaskField(field, value) {
+    try {
+        await window.SaaSPlatform.apiRequest('/api/tasks/{{ task.id }}/', {
+            method: 'PATCH',
+            body: JSON.stringify({ [field]: value })
+        });
+        window.SaaSPlatform.showToast('Task updated', 'success');
+        location.reload();
+    } catch (error) {
+        window.SaaSPlatform.showToast('Failed to update task', 'error');
+    }
+}
+
+async function uploadFiles() {
+    const files = document.getElementById('fileInput').files;
+    if (!files.length) return;
+    
+    const formData = new FormData();
+    for (let file of files) {
+        formData.append('files', file);
+    }
+    
+    try {
+        await window.SaaSPlatform.apiRequest('/api/tasks/{{ task.id }}/attachments/', {
+            method: 'POST',
+            body: formData
+        });
+        window.SaaSPlatform.showToast('Files uploaded', 'success');
+        location.reload();
+    } catch (error) {
+        window.SaaSPlatform.showToast('Failed to upload files', 'error');
+    }
+}
+
+async function deleteAttachment(attachmentId) {
+    if (!confirm('Delete this attachment?')) return;
+    
+    try {
+        await window.SaaSPlatform.apiRequest(`/api/attachments/${attachmentId}/`, {
+            method: 'DELETE'
+        });
+        window.SaaSPlatform.showToast('Attachment deleted', 'success');
+        location.reload();
+    } catch (error) {
+        window.SaaSPlatform.showToast('Failed to delete attachment', 'error');
+    }
+}
+
+async function addComment() {
+    const content = document.getElementById('commentInput').value.trim();
+    if (!content) return;
+    
+    try {
+        await window.SaaSPlatform.apiRequest('/api/tasks/{{ task.id }}/comments/', {
+            method: 'POST',
+            body: JSON.stringify({ content })
+        });
+        window.SaaSPlatform.showToast('Comment added', 'success');
+        location.reload();
+    } catch (error) {
+        window.SaaSPlatform.showToast('Failed to add comment', 'error');
+    }
+}
+
+async function deleteComment(commentId) {
+    if (!confirm('Delete this comment?')) return;
+    
+    try {
+        await window.SaaSPlatform.apiRequest(`/api/comments/${commentId}/`, {
+            method: 'DELETE'
+        });
+        window.SaaSPlatform.showToast('Comment deleted', 'success');
+        location.reload();
+    } catch (error) {
+        window.SaaSPlatform.showToast('Failed to delete comment', 'error');
+    }
+}
+
+async function removeLabel(labelId) {
+    try {
+        await window.SaaSPlatform.apiRequest(`/api/tasks/{{ task.id }}/labels/${labelId}/`, {
+            method: 'DELETE'
+        });
+        window.SaaSPlatform.showToast('Label removed', 'success');
+        location.reload();
+    } catch (error) {
+        window.SaaSPlatform.showToast('Failed to remove label', 'error');
+    }
+}
+
+async function duplicateTask() {
+    try {
+        await window.SaaSPlatform.apiRequest('/api/tasks/{{ task.id }}/duplicate/', {
+            method: 'POST'
+        });
+        window.SaaSPlatform.showToast('Task duplicated', 'success');
+        window.location.href = '/tasks/';
+    } catch (error) {
+        window.SaaSPlatform.showToast('Failed to duplicate task', 'error');
+    }
+}
+
+async function deleteTask() {
+    if (!confirm('Are you sure you want to delete this task? This action cannot be undone.')) return;
+    
+    try {
+        await window.SaaSPlatform.apiRequest('/api/tasks/{{ task.id }}/', {
+            method: 'DELETE'
+        });
+        window.SaaSPlatform.showToast('Task deleted', 'success');
+        window.location.href = '/tasks/';
+    } catch (error) {
+        window.SaaSPlatform.showToast('Failed to delete task', 'error');
+    }
+}
+</script>
+{% endblock %}
