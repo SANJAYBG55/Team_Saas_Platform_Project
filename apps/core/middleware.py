@@ -19,6 +19,7 @@ class TenantMiddleware(MiddlewareMixin):
         # Skip tenant resolution for admin and API auth endpoints
         if request.path.startswith('/django-admin/') or \
            request.path.startswith('/api/auth/') or \
+           request.path.startswith('/auth/') or \
            request.path.startswith('/admin/login/'):
             request.tenant = None
             return None
@@ -63,6 +64,7 @@ class ApprovalMiddleware(MiddlewareMixin):
         excluded_paths = [
             '/django-admin/',
             '/api/auth/',
+            '/auth/',
             '/admin/login/',
             '/app/pending-approval/',
             '/logout/',

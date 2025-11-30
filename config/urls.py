@@ -22,6 +22,7 @@ urlpatterns = [
     
     # Web URLs (Template views)
     path('', include('apps.core.urls')),
+    path('auth/', include('apps.accounts.web_urls')),
     path('admin/', include('apps.admin_panel.web_urls')),
     path('app/', include('apps.tenants.web_urls')),
 ]
