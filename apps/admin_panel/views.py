@@ -721,3 +721,297 @@ def access_denied(request):
     Access denied page for non-admin users trying to access admin panel.
     """
     return render(request, 'admin_panel/access_denied.html', status=403)
+
+
+@login_required
+@user_passes_test(is_internal_admin, login_url='admin_panel:access_denied')
+def analytics(request):
+    """
+    Analytics and reports dashboard for admins.
+    Displays revenue metrics, tenant growth, user engagement, and business KPIs.
+    """
+    from django.db.models import Count, Sum, Avg, Q, F
+    from django.utils import timezone
+    from datetime import timedelta, datetime
+    from apps.tenants.models import Tenant
+    from apps.subscriptions.models import Subscription, Payment
+    from django.contrib.auth import get_user_model
+    from apps.tasks.models import Task
+    import json
+    
+    User = get_user_model()
+    
+    # Get time range from query params (default: 30 days)
+    time_range = request.GET.get('range', '30')
+    
+    try:
+        days = int(time_range)
+    except (ValueError, TypeError):
+        days = 30
+    
+    if days == 0:  # All time
+        start_date = None
+    else:
+        start_date = timezone.now() - timedelta(days=days)
+    
+    # ==================== Revenue Metrics ====================
+    
+    # Total revenue from all approved payments
+    total_revenue_qs = Payment.objects.filter(
+        verification_status='approved'
+    )
+    if start_date:
+        total_revenue_qs = total_revenue_qs.filter(created_at__gte=start_date)
+    
+    total_revenue = total_revenue_qs.aggregate(total=Sum('amount'))['total'] or 0
+    
+    # MRR calculation (Monthly Recurring Revenue)
+    active_subscriptions = Subscription.objects.filter(
+        status='active',
+        tenant__status='active'
+    ).select_related('plan')
+    
+    mrr = 0
+    for sub in active_subscriptions:
+        if sub.plan.billing_interval == 'MONTHLY':
+            mrr += float(sub.plan.price)
+        elif sub.plan.billing_interval == 'YEARLY':
+            mrr += float(sub.plan.price) / 12
+        elif sub.plan.billing_interval == 'QUARTERLY':
+            mrr += float(sub.plan.price) / 3
+    
+    # ==================== Tenant Metrics ====================
+    
+    # Total tenants count
+    total_tenants = Tenant.objects.count()
+    
+    # Active tenants
+    active_tenants = Tenant.objects.filter(status='active').count()
+    
+    # New tenants in time range
+    new_tenants_qs = Tenant.objects.all()
+    if start_date:
+        new_tenants_qs = new_tenants_qs.filter(created_at__gte=start_date)
+    new_tenants_count = new_tenants_qs.count()
+    
+    # ==================== User Metrics ====================
+    
+    # Active users (have logged in within last 30 days)
+    thirty_days_ago = timezone.now() - timedelta(days=30)
+    active_users = User.objects.filter(
+        last_login__gte=thirty_days_ago
+    ).count()
+    
+    # New users in time range
+    new_users_qs = User.objects.all()
+    if start_date:
+        new_users_qs = new_users_qs.filter(date_joined__gte=start_date)
+    new_users_count = new_users_qs.count()
+    
+    # Average users per tenant
+    total_users = User.objects.count()
+    avg_users_per_tenant = round(total_users / total_tenants, 1) if total_tenants > 0 else 0
+    
+    # ==================== Conversion Metrics ====================
+    
+    # Total signups
+    total_signups = Tenant.objects.count()
+    
+    # Converted tenants (approved and active)
+    converted_tenants = Tenant.objects.filter(
+        is_approved=True,
+        status='active'
+    ).count()
+    
+    # Conversion rate
+    conversion_rate = round((converted_tenants / total_signups * 100), 1) if total_signups > 0 else 0
+    
+    # ==================== Top Tenants by Revenue ====================
+    
+    # Get top 10 tenants by revenue
+    top_tenants = Tenant.objects.filter(
+        status='active'
+    ).annotate(
+        revenue=Sum('subscription__payment__amount', filter=Q(subscription__payment__verification_status='approved')),
+        users_count=Count('users')
+    ).select_related(
+        'subscription__plan'
+    ).order_by('-revenue')[:10]
+    
+    # Format top tenants data
+    top_tenants_data = []
+    for tenant in top_tenants:
+        plan_name = tenant.subscription.plan.name if hasattr(tenant, 'subscription') and tenant.subscription else 'No Plan'
+        top_tenants_data.append({
+            'name': tenant.name,
+            'plan_name': plan_name,
+            'revenue': tenant.revenue or 0,
+            'users_count': tenant.users_count
+        })
+    
+    # ==================== Recent Signups ====================
+    
+    # Get 10 most recent tenant registrations
+    recent_signups = Tenant.objects.select_related(
+        'subscription__plan'
+    ).order_by('-created_at')[:10]
+    
+    # Format recent signups data
+    recent_signups_data = []
+    for tenant in recent_signups:
+        plan_name = tenant.subscription.plan.name if hasattr(tenant, 'subscription') and tenant.subscription else 'No Plan'
+        recent_signups_data.append({
+            'name': tenant.name,
+            'plan_name': plan_name,
+            'is_approved': tenant.is_approved,
+            'created_at': tenant.created_at
+        })
+    
+    # ==================== System Health Metrics ====================
+    
+    # These would typically come from monitoring systems
+    # For now, we'll use mock data or simple calculations
+    
+    # Average response time (mock - would come from APM)
+    avg_response_time = 120  # milliseconds
+    
+    # API success rate (calculate from logs if available)
+    api_success_rate = 99.2
+    
+    # Database load (mock - would come from DB monitoring)
+    db_load = 45
+    
+    # ==================== Business Metrics ====================
+    
+    # ARPU (Average Revenue Per User)
+    arpu = round(total_revenue / active_users, 2) if active_users > 0 else 0
+    
+    # Churn rate (tenants that became inactive in last 30 days)
+    churned_tenants = Tenant.objects.filter(
+        status='suspended',
+        updated_at__gte=thirty_days_ago
+    ).count()
+    churn_rate = round((churned_tenants / total_tenants * 100), 1) if total_tenants > 0 else 0
+    
+    # Retention rate
+    retention_rate = round(100 - churn_rate, 1)
+    
+    # ==================== Chart Data ====================
+    
+    # Revenue chart data (last 12 months)
+    revenue_chart_data = []
+    for i in range(11, -1, -1):
+        month_start = timezone.now().replace(day=1) - timedelta(days=30 * i)
+        month_end = (month_start + timedelta(days=32)).replace(day=1)
+        
+        month_revenue = Payment.objects.filter(
+            verification_status='approved',
+            created_at__gte=month_start,
+            created_at__lt=month_end
+        ).aggregate(total=Sum('amount'))['total'] or 0
+        
+        revenue_chart_data.append({
+            'month': month_start.strftime('%b'),
+            'revenue': float(month_revenue)
+        })
+    
+    # Tenant growth chart data (last 12 months)
+    tenant_growth_data = []
+    for i in range(11, -1, -1):
+        month_end = timezone.now().replace(day=1) - timedelta(days=30 * i)
+        
+        cumulative_tenants = Tenant.objects.filter(
+            created_at__lte=month_end
+        ).count()
+        
+        tenant_growth_data.append({
+            'month': month_end.strftime('%b'),
+            'tenants': cumulative_tenants
+        })
+    
+    # User engagement data (last 4 weeks)
+    engagement_data = []
+    for i in range(3, -1, -1):
+        week_start = timezone.now() - timedelta(days=7 * (i + 1))
+        week_end = timezone.now() - timedelta(days=7 * i)
+        
+        week_active_users = User.objects.filter(
+            last_login__gte=week_start,
+            last_login__lt=week_end
+        ).count()
+        
+        week_tasks = Task.objects.filter(
+            created_at__gte=week_start,
+            created_at__lt=week_end
+        ).count()
+        
+        engagement_data.append({
+            'week': f'Week {4 - i}',
+            'active_users': week_active_users,
+            'tasks_created': week_tasks
+        })
+    
+    # Plan distribution data
+    plan_distribution = Subscription.objects.filter(
+        status='active'
+    ).values(
+        'plan__name'
+    ).annotate(
+        count=Count('id')
+    ).order_by('-count')
+    
+    plan_distribution_data = [
+        {
+            'plan': item['plan__name'],
+            'count': item['count']
+        }
+        for item in plan_distribution
+    ]
+    
+    # ==================== Context ====================
+    
+    context = {
+        # Revenue metrics
+        'total_revenue': round(total_revenue, 2),
+        'mrr': round(mrr, 2),
+        'new_tenants_count': new_tenants_count,
+        
+        # Tenant metrics
+        'active_tenants': active_tenants,
+        'total_tenants': total_tenants,
+        
+        # User metrics
+        'active_users': active_users,
+        'new_users_count': new_users_count,
+        'avg_users_per_tenant': avg_users_per_tenant,
+        
+        # Conversion metrics
+        'conversion_rate': conversion_rate,
+        'converted_tenants': converted_tenants,
+        'total_signups': total_signups,
+        
+        # Lists
+        'top_tenants': top_tenants_data,
+        'recent_signups': recent_signups_data,
+        
+        # System health
+        'avg_response_time': avg_response_time,
+        'api_success_rate': api_success_rate,
+        'db_load': db_load,
+        
+        # Business metrics
+        'arpu': arpu,
+        'churn_rate': churn_rate,
+        'retention_rate': retention_rate,
+        
+        # Chart data (for JavaScript) - JSON serialized
+        'revenue_chart_data': json.dumps(revenue_chart_data),
+        'tenant_growth_data': json.dumps(tenant_growth_data),
+        'engagement_data': json.dumps(engagement_data),
+        'plan_distribution_data': json.dumps(plan_distribution_data),
+        
+        # Current time range
+        'time_range': days,
+    }
+    
+    return render(request, 'admin_panel/analytics.html', context)

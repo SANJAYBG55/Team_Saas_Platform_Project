@@ -82,7 +82,7 @@
                 </div>
                 
                 <!-- User Dropdown -->
-                <div class="user-dropdown">
+                <div class="user-dropdown" id="userDropdown">
                     {% if current_user.avatar %}
                     <img src="{{ current_user.avatar.url }}" alt="{{ current_user.get_full_name }}" class="user-avatar-sm">
                     {% else %}
@@ -90,6 +90,25 @@
                         {{ current_user.first_name.0 }}
                     </div>
                     {% endif %}
+                    
+                    <div class="dropdown-menu" id="userDropdownMenu" style="display: none;">
+                        <a href="/profile/" class="dropdown-item">
+                            <svg width="16" height="16" fill="none" stroke="currentColor" stroke-width="2">
+                                <path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2"/>
+                                <circle cx="12" cy="7" r="4"/>
+                            </svg>
+                            Profile & Settings
+                        </a>
+                        <div class="dropdown-divider"></div>
+                        <a href="/api/auth/logout/" class="dropdown-item text-error">
+                            <svg width="16" height="16" fill="none" stroke="currentColor" stroke-width="2">
+                                <path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4"/>
+                                <polyline points="16 17 21 12 16 7"/>
+                                <line x1="21" y1="12" x2="9" y2="12"/>
+                            </svg>
+                            Logout
+                        </a>
+                    </div>
                 </div>
             </div>
         </header>
@@ -352,7 +371,49 @@
     }
     
     .user-dropdown {
+        position: relative;
         cursor: pointer;
+    }
+    
+    .user-dropdown .dropdown-menu {
+        position: absolute;
+        top: calc(100% + 0.5rem);
+        right: 0;
+        min-width: 220px;
+        background: var(--card-bg);
+        border: 1px solid var(--border-color);
+        border-radius: 8px;
+        box-shadow: 0 4px 12px rgba(0, 0, 0, 0.15);
+        z-index: 1000;
+        overflow: hidden;
+    }
+    
+    .user-dropdown .dropdown-item {
+        display: flex;
+        align-items: center;
+        gap: 0.75rem;
+        padding: 0.75rem 1rem;
+        color: var(--text-primary);
+        text-decoration: none;
+        transition: background 0.2s;
+    }
+    
+    .user-dropdown .dropdown-item:hover {
+        background: var(--hover-bg);
+    }
+    
+    .user-dropdown .dropdown-item.text-error {
+        color: var(--error-color);
+    }
+    
+    .user-dropdown .dropdown-item.text-error:hover {
+        background: rgba(239, 68, 68, 0.1);
+    }
+    
+    .user-dropdown .dropdown-divider {
+        height: 1px;
+        background: var(--border-color);
+        margin: 0.5rem 0;
     }
     
     .user-avatar-sm {
@@ -440,4 +501,41 @@
         }
     }
 </style>
+
+<script>
+// User dropdown toggle
+const userDropdown = document.getElementById('userDropdown');
+const userDropdownMenu = document.getElementById('userDropdownMenu');
+
+if (userDropdown && userDropdownMenu) {
+    userDropdown.addEventListener('click', (e) => {
+        e.stopPropagation();
+        const isVisible = userDropdownMenu.style.display === 'block';
+        userDropdownMenu.style.display = isVisible ? 'none' : 'block';
+    });
+    
+    // Close dropdown when clicking outside
+    document.addEventListener('click', () => {
+        userDropdownMenu.style.display = 'none';
+    });
+}
+
+// Mobile menu toggle
+const mobileMenuToggle = document.getElementById('mobile-menu-toggle');
+const sidebar = document.getElementById('sidebar');
+
+if (mobileMenuToggle && sidebar) {
+    mobileMenuToggle.addEventListener('click', () => {
+        sidebar.classList.toggle('open');
+    });
+}
+
+// Sidebar toggle
+const sidebarToggle = document.getElementById('sidebar-toggle');
+if (sidebarToggle) {
+    sidebarToggle.addEventListener('click', () => {
+        sidebar.classList.toggle('collapsed');
+    });
+}
+</script>
 {% endblock %}

@@ -41,8 +41,11 @@ urlpatterns = [
     path('api/notifications/', include('apps.notifications.urls')),
     path('api/admin/', include('apps.admin_panel.urls')),
     
-    # Web URLs (Template views) - if implemented
+    # Web URLs (Template views)
     path('', include('apps.core.urls')),
+    path('teams/', include('apps.teams.template_urlpatterns')),
+    path('tasks/', include('apps.tasks.template_urlpatterns')),
+    path('', include('apps.accounts.template_urlpatterns')),
 ]
 
 # Serve media files in development

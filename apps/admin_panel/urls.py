@@ -14,6 +14,7 @@ urlpatterns = [
     path('dashboard/', views.admin_dashboard, name='dashboard'),
     path('tenants/<int:tenant_id>/', views.tenant_detail, name='tenant_detail'),
     path('payments/', views.payment_verification, name='payment_verification'),
+    path('analytics/', views.analytics, name='analytics'),
     path('access-denied/', views.access_denied, name='access_denied'),
     
     # API endpoints (AJAX) - Tenants

@@ -247,8 +247,9 @@ def reset_password(request):
 # Tenant Signup Views
 # =============================
 
-from django.shortcuts import render
+from django.shortcuts import render, redirect
 from django.views.decorators.http import require_http_methods
+from django.contrib.auth.decorators import login_required
 from django.http import JsonResponse
 import json
 from django.utils.text import slugify
@@ -257,6 +258,21 @@ from django.utils.text import slugify
 def signup_page(request):
     """Render the signup page."""
     return render(request, 'auth/signup.html')
+
+
+@login_required
+def profile_page(request):
+    """Render the profile & settings page."""
+    # Check if user has approved tenant
+    if not request.user.tenant or not request.user.tenant.is_approved:
+        return redirect('pending_approval')
+    
+    # Ensure user has preferences
+    from .models import UserPreference
+    if not hasattr(request.user, 'preferences'):
+        UserPreference.objects.create(user=request.user)
+    
+    return render(request, 'tenant/profile.html')
 
 
 @api_view(['GET'])

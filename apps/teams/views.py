@@ -5,9 +5,11 @@ from rest_framework import viewsets, status
 from rest_framework.decorators import action
 from rest_framework.response import Response
 from rest_framework.permissions import IsAuthenticated
-from django.shortcuts import get_object_or_404
+from django.shortcuts import get_object_or_404, render, redirect
+from django.contrib.auth.decorators import login_required
 from django.utils import timezone
 from django.utils.text import slugify
+from django.db.models import Q, Count
 from datetime import timedelta
 
 from .models import Team, TeamMember, TeamInvitation
@@ -17,6 +19,88 @@ from .serializers import (
 )
 from apps.core.permissions import IsApprovedTenant
 from apps.core.utils import generate_token, send_email, log_activity
+
+
+# ==================== Template Views ====================
+
+@login_required
+def teams_list(request):
+    """Display list of teams."""
+    user = request.user
+    
+    # Check if user has approved tenant
+    if not user.tenant or not user.tenant.is_approved:
+        return redirect('pending_approval')
+    
+    # Get teams user is a member of
+    member_teams = user.team_memberships.values_list('team_id', flat=True)
+    
+    teams = Team.objects.filter(
+        tenant=user.tenant
+    ).filter(
+        Q(id__in=member_teams) | Q(is_private=False)
+    ).select_related('owner').prefetch_related('members').annotate(
+        tasks_count=Count('tasks', distinct=True)
+    ).order_by('-created_at')
+    
+    # Get teams where user is owner
+    my_owned_teams = teams.filter(owner=user)
+    
+    context = {
+        'teams': teams,
+        'my_owned_teams': my_owned_teams,
+    }
+    
+    return render(request, 'tenant/teams.html', context)
+
+
+@login_required
+def team_detail(request, team_id):
+    """Display team detail page."""
+    user = request.user
+    
+    # Check if user has approved tenant
+    if not user.tenant or not user.tenant.is_approved:
+        return redirect('pending_approval')
+    
+    # Get team
+    team = get_object_or_404(
+        Team.objects.select_related('owner', 'tenant')
+                   .prefetch_related('members__user', 'tasks'),
+        id=team_id,
+        tenant=user.tenant
+    )
+    
+    # Check if user is a member or if team is public
+    is_member = team.members.filter(user=user).exists()
+    if not is_member and team.is_private:
+        return render(request, '403.html', status=403)
+    
+    # Get statistics
+    from apps.tasks.models import Task
+    stats = {
+        'todo_tasks': team.tasks.filter(status='TODO').count(),
+        'in_progress_tasks': team.tasks.filter(status='IN_PROGRESS').count(),
+        'completed_tasks': team.tasks.filter(status='COMPLETED').count(),
+        'overdue_tasks': team.tasks.filter(
+            due_date__lt=timezone.now().date(),
+            status__in=['TODO', 'IN_PROGRESS']
+        ).count(),
+    }
+    
+    # Get recent tasks
+    recent_tasks = team.tasks.select_related('assigned_to').order_by('-created_at')[:10]
+    
+    context = {
+        'team': team,
+        'stats': stats,
+        'recent_tasks': recent_tasks,
+    }
+    
+    return render(request, 'tenant/team_detail.html', context)
+
+
+# ==================== API ViewSets ====================
 
 
 class TeamViewSet(viewsets.ModelViewSet):

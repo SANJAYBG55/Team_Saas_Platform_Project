@@ -26,3 +26,8 @@ urlpatterns = [
     path('complete-signup/', views.complete_signup, name='complete_signup'),
     path('resend-verification/', views.resend_verification_email, name='resend_verification'),
 ]
+
+# Template URLs (separate from API)
+template_urlpatterns = [
+    path('profile/', views.profile_page, name='profile_page'),
+]

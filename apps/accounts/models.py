@@ -103,6 +103,15 @@ class User(AbstractBaseUser, PermissionsMixin):
         """Return the user's first name."""
         return self.first_name
     
+    def get_initials(self):
+        """Return the user's initials."""
+        initials = ''
+        if self.first_name:
+            initials += self.first_name[0].upper()
+        if self.last_name:
+            initials += self.last_name[0].upper()
+        return initials or self.email[0].upper()
+    
     @property
     def is_super_admin(self):
         """Check if user is a super admin."""
