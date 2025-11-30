@@ -1015,3 +1015,212 @@ def analytics(request):
     }
     
     return render(request, 'admin_panel/analytics.html', context)
+
+
+@login_required
+@user_passes_test(is_internal_admin, login_url='admin_panel:access_denied')
+def audit_logs(request):
+    """
+    Audit logs viewer for tracking admin actions.
+    """
+    from django.db.models import Count, Q
+    from django.utils import timezone
+    from datetime import timedelta
+    from apps.core.models import AuditLog
+    from django.contrib.auth import get_user_model
+    from django.core.paginator import Paginator
+    
+    User = get_user_model()
+    
+    # Get filter parameters
+    user_filter = request.GET.get('user', '')
+    target_model_filter = request.GET.get('target_model', '')
+    action_filter = request.GET.get('action', '')
+    date_from = request.GET.get('date_from', '')
+    date_to = request.GET.get('date_to', '')
+    search_query = request.GET.get('search', '')
+    
+    # Base queryset
+    logs = AuditLog.objects.select_related('admin_user').all()
+    
+    # Apply filters
+    if user_filter:
+        logs = logs.filter(admin_user_id=user_filter)
+    
+    if target_model_filter:
+        logs = logs.filter(target_model__icontains=target_model_filter)
+    
+    if action_filter:
+        logs = logs.filter(action__icontains=action_filter)
+    
+    if date_from:
+        logs = logs.filter(created_at__gte=date_from)
+    
+    if date_to:
+        # Add one day to include the entire end date
+        from datetime import datetime
+        date_to_obj = datetime.strptime(date_to, '%Y-%m-%d')
+        date_to_obj = date_to_obj + timedelta(days=1)
+        logs = logs.filter(created_at__lt=date_to_obj)
+    
+    if search_query:
+        logs = logs.filter(
+            Q(target_description__icontains=search_query) |
+            Q(notes__icontains=search_query)
+        )
+    
+    # Get total count before pagination
+    total_logs = logs.count()
+    
+    # Calculate statistics
+    today_start = timezone.now().replace(hour=0, minute=0, second=0, microsecond=0)
+    week_start = today_start - timedelta(days=7)
+    
+    today_logs = AuditLog.objects.filter(created_at__gte=today_start).count()
+    week_logs = AuditLog.objects.filter(created_at__gte=week_start).count()
+    
+    # Active admins (admins who performed actions in last 7 days)
+    active_admins = AuditLog.objects.filter(
+        created_at__gte=week_start
+    ).values('admin_user').distinct().count()
+    
+    # Get list of admin users for filter
+    admin_users = User.objects.filter(
+        Q(is_staff=True) | Q(is_superuser=True)
+    ).order_by('first_name', 'last_name')
+    
+    # Get unique target models for filter
+    target_models = AuditLog.objects.values_list(
+        'target_model', flat=True
+    ).distinct().order_by('target_model')
+    
+    # Pagination
+    paginator = Paginator(logs, 20)  # 20 logs per page
+    page_number = request.GET.get('page', 1)
+    page_obj = paginator.get_page(page_number)
+    
+    context = {
+        'audit_logs': page_obj,
+        'page_obj': page_obj,
+        'is_paginated': page_obj.has_other_pages(),
+        'total_logs': total_logs,
+        'today_logs': today_logs,
+        'week_logs': week_logs,
+        'active_admins': active_admins,
+        'admin_users': admin_users,
+        'target_models': target_models,
+    }
+    
+    return render(request, 'admin_panel/audit_logs.html', context)
+
+
+@require_http_methods(["GET"])
+@login_required
+@user_passes_test(is_internal_admin, login_url='admin_panel:access_denied')
+def audit_log_detail(request, log_id):
+    """
+    Get details of a specific audit log entry.
+    """
+    from apps.core.models import AuditLog
+    from django.http import JsonResponse
+    
+    try:
+        log = AuditLog.objects.select_related('admin_user').get(id=log_id)
+        
+        data = {
+            'success': True,
+            'log': {
+                'id': log.id,
+                'admin_user': log.admin_user.get_full_name() if log.admin_user else 'System',
+                'action': log.action,
+                'target_model': log.target_model,
+                'target_id': log.target_id,
+                'target_description': log.target_description,
+                'old_values': log.old_values,
+                'new_values': log.new_values,
+                'ip_address': log.ip_address,
+                'user_agent': log.user_agent,
+                'notes': log.notes,
+                'created_at': log.created_at.strftime('%B %d, %Y at %I:%M %p'),
+            }
+        }
+        
+        return JsonResponse(data)
+    except AuditLog.DoesNotExist:
+        return JsonResponse({'success': False, 'error': 'Log not found'}, status=404)
+
+
+@require_http_methods(["GET"])
+@login_required
+@user_passes_test(is_internal_admin, login_url='admin_panel:access_denied')
+def export_audit_logs(request):
+    """
+    Export audit logs to CSV.
+    """
+    from django.http import HttpResponse
+    from django.utils import timezone
+    from datetime import timedelta
+    from apps.core.models import AuditLog
+    from django.db.models import Q
+    import csv
+    
+    # Get filter parameters (same as audit_logs view)
+    user_filter = request.GET.get('user', '')
+    target_model_filter = request.GET.get('target_model', '')
+    action_filter = request.GET.get('action', '')
+    date_from = request.GET.get('date_from', '')
+    date_to = request.GET.get('date_to', '')
+    search_query = request.GET.get('search', '')
+    
+    # Base queryset
+    logs = AuditLog.objects.select_related('admin_user').all()
+    
+    # Apply filters
+    if user_filter:
+        logs = logs.filter(admin_user_id=user_filter)
+    
+    if target_model_filter:
+        logs = logs.filter(target_model__icontains=target_model_filter)
+    
+    if action_filter:
+        logs = logs.filter(action__icontains=action_filter)
+    
+    if date_from:
+        logs = logs.filter(created_at__gte=date_from)
+    
+    if date_to:
+        from datetime import datetime
+        date_to_obj = datetime.strptime(date_to, '%Y-%m-%d')
+        date_to_obj = date_to_obj + timedelta(days=1)
+        logs = logs.filter(created_at__lt=date_to_obj)
+    
+    if search_query:
+        logs = logs.filter(
+            Q(target_description__icontains=search_query) |
+            Q(notes__icontains=search_query)
+        )
+    
+    # Create CSV response
+    response = HttpResponse(content_type='text/csv')
+    response['Content-Disposition'] = f'attachment; filename="audit_logs_{timezone.now().strftime("%Y%m%d_%H%M%S")}.csv"'
+    
+    writer = csv.writer(response)
+    writer.writerow([
+        'ID', 'Admin User', 'Action', 'Target Model', 'Target ID', 
+        'Description', 'IP Address', 'Timestamp', 'Notes'
+    ])
+    
+    for log in logs:
+        writer.writerow([
+            log.id,
+            log.admin_user.get_full_name() if log.admin_user else 'System',
+            log.action,
+            log.target_model,
+            log.target_id or 'N/A',
+            log.target_description,
+            log.ip_address or 'N/A',
+            log.created_at.strftime('%Y-%m-%d %H:%M:%S'),
+            log.notes or ''
+        ])
+    
+    return response

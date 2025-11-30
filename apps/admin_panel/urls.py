@@ -15,6 +15,7 @@ urlpatterns = [
     path('tenants/<int:tenant_id>/', views.tenant_detail, name='tenant_detail'),
     path('payments/', views.payment_verification, name='payment_verification'),
     path('analytics/', views.analytics, name='analytics'),
+    path('audit-logs/', views.audit_logs, name='audit_logs'),
     path('access-denied/', views.access_denied, name='access_denied'),
     
     # API endpoints (AJAX) - Tenants
@@ -29,6 +30,10 @@ urlpatterns = [
     path('api/payments/<int:payment_id>/approve/', views.approve_payment, name='approve_payment'),
     path('api/payments/<int:payment_id>/reject/', views.reject_payment, name='reject_payment'),
     path('api/payments/export/', views.export_payments, name='export_payments'),
+    
+    # API endpoints (AJAX) - Audit Logs
+    path('api/audit-logs/<int:log_id>/', views.audit_log_detail, name='audit_log_detail'),
+    path('api/audit-logs/export/', views.export_audit_logs, name='export_audit_logs'),
     
     # DRF router URLs
     path('', include(router.urls)),

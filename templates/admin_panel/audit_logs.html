@@ -1,0 +1,868 @@
+{% load static %}
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Audit Logs - Admin Panel</title>
+    <link rel="stylesheet" href="{% static 'css/main.css' %}">
+</head>
+<body>
+    <!-- Admin Sidebar -->
+    <aside class="admin-sidebar">
+        <div class="sidebar-header">
+            <h2>Admin Panel</h2>
+        </div>
+        <nav class="sidebar-nav">
+            <a href="{% url 'admin_panel:dashboard' %}" class="nav-item">
+                <svg width="20" height="20" fill="none" stroke="currentColor" stroke-width="2">
+                    <rect x="3" y="3" width="18" height="18" rx="2"/>
+                    <path d="M9 3v18M3 9h18"/>
+                </svg>
+                Dashboard
+            </a>
+            <a href="{% url 'admin_panel:payment_verification' %}" class="nav-item">
+                <svg width="20" height="20" fill="none" stroke="currentColor" stroke-width="2">
+                    <rect x="2" y="5" width="20" height="14" rx="2"/>
+                    <path d="M2 10h20"/>
+                </svg>
+                Payments
+            </a>
+            <a href="{% url 'admin_panel:analytics' %}" class="nav-item">
+                <svg width="20" height="20" fill="none" stroke="currentColor" stroke-width="2">
+                    <path d="M3 3v18h18"/>
+                    <path d="M18 17l-5-5-4 4L3 9"/>
+                </svg>
+                Analytics
+            </a>
+            <a href="{% url 'admin_panel:audit_logs' %}" class="nav-item active">
+                <svg width="20" height="20" fill="none" stroke="currentColor" stroke-width="2">
+                    <path d="M14 2H6a2 2 0 00-2 2v16a2 2 0 002 2h12a2 2 0 002-2V8z"/>
+                    <path d="M14 2v6h6M16 13H8M16 17H8M10 9H8"/>
+                </svg>
+                Audit Logs
+            </a>
+        </nav>
+    </aside>
+
+    <!-- Main Content -->
+    <main class="admin-content">
+        <!-- Page Header -->
+        <header class="page-header">
+            <div>
+                <h1 class="page-title">Audit Logs</h1>
+                <p class="page-subtitle">System activity and admin action tracking</p>
+            </div>
+            <div class="header-actions">
+                <button class="btn btn-secondary" onclick="exportLogs()">
+                    <svg width="16" height="16" fill="none" stroke="currentColor" stroke-width="2">
+                        <path d="M21 15v4a2 2 0 01-2 2H5a2 2 0 01-2-2v-4M7 10l5 5 5-5M12 15V3"/>
+                    </svg>
+                    Export Logs
+                </button>
+                <button class="btn btn-primary" onclick="refreshLogs()">
+                    <svg width="16" height="16" fill="none" stroke="currentColor" stroke-width="2">
+                        <path d="M1 4v6h6M23 20v-6h-6"/>
+                        <path d="M20.49 9A9 9 0 005.64 5.64L1 10m22 4l-4.64 4.36A9 9 0 013.51 15"/>
+                    </svg>
+                    Refresh
+                </button>
+            </div>
+        </header>
+
+        <!-- Filters -->
+        <div class="content-card" style="margin-bottom: 1.5rem;">
+            <form method="GET" class="filters-form">
+                <div class="filters-grid">
+                    <div class="filter-group">
+                        <label for="user">Admin User</label>
+                        <select name="user" id="user" class="filter-select">
+                            <option value="">All Users</option>
+                            {% for user in admin_users %}
+                            <option value="{{ user.id }}" {% if request.GET.user == user.id|stringformat:"s" %}selected{% endif %}>
+                                {{ user.get_full_name }} ({{ user.email }})
+                            </option>
+                            {% endfor %}
+                        </select>
+                    </div>
+                    <div class="filter-group">
+                        <label for="target_model">Resource Type</label>
+                        <select name="target_model" id="target_model" class="filter-select">
+                            <option value="">All Types</option>
+                            {% for model in target_models %}
+                            <option value="{{ model }}" {% if request.GET.target_model == model %}selected{% endif %}>
+                                {{ model }}
+                            </option>
+                            {% endfor %}
+                        </select>
+                    </div>
+                    <div class="filter-group">
+                        <label for="action">Action</label>
+                        <select name="action" id="action" class="filter-select">
+                            <option value="">All Actions</option>
+                            <option value="APPROVE" {% if request.GET.action == 'APPROVE' %}selected{% endif %}>Approve</option>
+                            <option value="REJECT" {% if request.GET.action == 'REJECT' %}selected{% endif %}>Reject</option>
+                            <option value="SUSPEND" {% if request.GET.action == 'SUSPEND' %}selected{% endif %}>Suspend</option>
+                            <option value="ACTIVATE" {% if request.GET.action == 'ACTIVATE' %}selected{% endif %}>Activate</option>
+                            <option value="UPDATE" {% if request.GET.action == 'UPDATE' %}selected{% endif %}>Update</option>
+                            <option value="DELETE" {% if request.GET.action == 'DELETE' %}selected{% endif %}>Delete</option>
+                            <option value="CREATE" {% if request.GET.action == 'CREATE' %}selected{% endif %}>Create</option>
+                        </select>
+                    </div>
+                    <div class="filter-group">
+                        <label for="date_from">Date From</label>
+                        <input type="date" name="date_from" id="date_from" class="filter-input" value="{{ request.GET.date_from }}">
+                    </div>
+                    <div class="filter-group">
+                        <label for="date_to">Date To</label>
+                        <input type="date" name="date_to" id="date_to" class="filter-input" value="{{ request.GET.date_to }}">
+                    </div>
+                    <div class="filter-group">
+                        <label for="search">Search</label>
+                        <input type="text" name="search" id="search" class="filter-input" 
+                               placeholder="Search description..." value="{{ request.GET.search }}">
+                    </div>
+                </div>
+                <div class="filter-actions">
+                    <button type="submit" class="btn btn-primary">Apply Filters</button>
+                    <a href="{% url 'admin_panel:audit_logs' %}" class="btn btn-secondary">Clear</a>
+                </div>
+            </form>
+        </div>
+
+        <!-- Stats Cards -->
+        <div class="stats-grid" style="margin-bottom: 1.5rem;">
+            <div class="stat-card">
+                <div class="stat-header">
+                    <span class="stat-label">Total Events</span>
+                    <svg width="24" height="24" fill="none" stroke="#3B82F6" stroke-width="2">
+                        <path d="M14 2H6a2 2 0 00-2 2v16a2 2 0 002 2h12a2 2 0 002-2V8z"/>
+                        <path d="M14 2v6h6M16 13H8M16 17H8M10 9H8"/>
+                    </svg>
+                </div>
+                <div class="stat-value">{{ total_logs|default:0 }}</div>
+            </div>
+            <div class="stat-card">
+                <div class="stat-header">
+                    <span class="stat-label">Today</span>
+                    <svg width="24" height="24" fill="none" stroke="#10B981" stroke-width="2">
+                        <circle cx="12" cy="12" r="10"/>
+                        <path d="M12 6v6l4 2"/>
+                    </svg>
+                </div>
+                <div class="stat-value">{{ today_logs|default:0 }}</div>
+            </div>
+            <div class="stat-card">
+                <div class="stat-header">
+                    <span class="stat-label">This Week</span>
+                    <svg width="24" height="24" fill="none" stroke="#F59E0B" stroke-width="2">
+                        <rect x="3" y="4" width="18" height="18" rx="2" ry="2"/>
+                        <path d="M16 2v4M8 2v4M3 10h18"/>
+                    </svg>
+                </div>
+                <div class="stat-value">{{ week_logs|default:0 }}</div>
+            </div>
+            <div class="stat-card">
+                <div class="stat-header">
+                    <span class="stat-label">Active Admins</span>
+                    <svg width="24" height="24" fill="none" stroke="#EF4444" stroke-width="2">
+                        <path d="M17 21v-2a4 4 0 00-4-4H5a4 4 0 00-4 4v2"/>
+                        <circle cx="9" cy="7" r="4"/>
+                        <path d="M23 21v-2a4 4 0 00-3-3.87M16 3.13a4 4 0 010 7.75"/>
+                    </svg>
+                </div>
+                <div class="stat-value">{{ active_admins|default:0 }}</div>
+            </div>
+        </div>
+
+        <!-- Audit Logs Table -->
+        <div class="content-card">
+            <div class="table-container">
+                <table class="data-table">
+                    <thead>
+                        <tr>
+                            <th style="width: 50px;">ID</th>
+                            <th>Admin User</th>
+                            <th>Action</th>
+                            <th>Target</th>
+                            <th>Description</th>
+                            <th>IP Address</th>
+                            <th>Timestamp</th>
+                            <th style="width: 100px;">Actions</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        {% for log in audit_logs %}
+                        <tr>
+                            <td>{{ log.id }}</td>
+                            <td>
+                                {% if log.admin_user %}
+                                <div class="user-info">
+                                    <div class="user-avatar" style="background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);">
+                                        {{ log.admin_user.first_name.0|upper }}{{ log.admin_user.last_name.0|upper }}
+                                    </div>
+                                    <div>
+                                        <div class="user-name">{{ log.admin_user.get_full_name }}</div>
+                                        <div class="user-email">{{ log.admin_user.email }}</div>
+                                    </div>
+                                </div>
+                                {% else %}
+                                <span class="text-muted">System</span>
+                                {% endif %}
+                            </td>
+                            <td>
+                                <span class="badge badge-{% if log.action == 'APPROVE' or log.action == 'ACTIVATE' %}success{% elif log.action == 'REJECT' or log.action == 'SUSPEND' or log.action == 'DELETE' %}danger{% elif log.action == 'CREATE' %}primary{% else %}warning{% endif %}">
+                                    {{ log.action }}
+                                </span>
+                            </td>
+                            <td>
+                                <div>
+                                    <strong>{{ log.target_model }}</strong>
+                                    {% if log.target_id %}
+                                    <span class="text-muted">#{{ log.target_id }}</span>
+                                    {% endif %}
+                                </div>
+                            </td>
+                            <td>{{ log.target_description|truncatewords:10 }}</td>
+                            <td>
+                                <code class="ip-address">{{ log.ip_address|default:"N/A" }}</code>
+                            </td>
+                            <td>
+                                <div class="timestamp">
+                                    <div>{{ log.created_at|date:"M d, Y" }}</div>
+                                    <div class="text-muted">{{ log.created_at|time:"g:i A" }}</div>
+                                </div>
+                            </td>
+                            <td>
+                                <button class="btn-icon" onclick="viewLogDetails({{ log.id }})" title="View Details">
+                                    <svg width="18" height="18" fill="none" stroke="currentColor" stroke-width="2">
+                                        <path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"/>
+                                        <circle cx="12" cy="12" r="3"/>
+                                    </svg>
+                                </button>
+                            </td>
+                        </tr>
+                        {% empty %}
+                        <tr>
+                            <td colspan="8" style="text-align: center; padding: 2rem;">
+                                <div class="empty-state">
+                                    <svg width="64" height="64" fill="none" stroke="currentColor" stroke-width="2" style="margin: 0 auto 1rem;">
+                                        <path d="M14 2H6a2 2 0 00-2 2v16a2 2 0 002 2h12a2 2 0 002-2V8z"/>
+                                        <path d="M14 2v6h6M16 13H8M16 17H8M10 9H8"/>
+                                    </svg>
+                                    <p>No audit logs found</p>
+                                </div>
+                            </td>
+                        </tr>
+                        {% endfor %}
+                    </tbody>
+                </table>
+            </div>
+
+            <!-- Pagination -->
+            {% if is_paginated %}
+            <div class="pagination">
+                {% if page_obj.has_previous %}
+                <a href="?page=1{% for key, value in request.GET.items %}{% if key != 'page' %}&{{ key }}={{ value }}{% endif %}{% endfor %}" class="pagination-link">First</a>
+                <a href="?page={{ page_obj.previous_page_number }}{% for key, value in request.GET.items %}{% if key != 'page' %}&{{ key }}={{ value }}{% endif %}{% endfor %}" class="pagination-link">Previous</a>
+                {% endif %}
+                
+                <span class="pagination-info">
+                    Page {{ page_obj.number }} of {{ page_obj.paginator.num_pages }}
+                </span>
+                
+                {% if page_obj.has_next %}
+                <a href="?page={{ page_obj.next_page_number }}{% for key, value in request.GET.items %}{% if key != 'page' %}&{{ key }}={{ value }}{% endif %}{% endfor %}" class="pagination-link">Next</a>
+                <a href="?page={{ page_obj.paginator.num_pages }}{% for key, value in request.GET.items %}{% if key != 'page' %}&{{ key }}={{ value }}{% endif %}{% endfor %}" class="pagination-link">Last</a>
+                {% endif %}
+            </div>
+            {% endif %}
+        </div>
+    </main>
+
+    <!-- Log Detail Modal -->
+    <div id="logDetailModal" class="modal" style="display: none;">
+        <div class="modal-dialog" style="max-width: 800px;">
+            <div class="modal-header">
+                <h3 class="modal-title">Audit Log Details</h3>
+                <button class="modal-close" onclick="closeModal('logDetailModal')">&times;</button>
+            </div>
+            <div class="modal-body" id="logDetailContent">
+                <!-- Content loaded dynamically -->
+            </div>
+            <div class="modal-footer">
+                <button class="btn btn-secondary" onclick="closeModal('logDetailModal')">Close</button>
+            </div>
+        </div>
+    </div>
+</body>
+</html>
+
+<style>
+:root {
+    --primary-color: #3B82F6;
+    --success-color: #10B981;
+    --warning-color: #F59E0B;
+    --danger-color: #EF4444;
+    --bg-primary: #0F172A;
+    --bg-secondary: #1E293B;
+    --bg-tertiary: #334155;
+    --text-primary: #F1F5F9;
+    --text-secondary: #CBD5E1;
+    --border-color: #334155;
+}
+
+body {
+    margin: 0;
+    padding: 0;
+    font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+    background: var(--bg-primary);
+    color: var(--text-primary);
+    display: flex;
+    min-height: 100vh;
+}
+
+/* Admin Sidebar */
+.admin-sidebar {
+    width: 260px;
+    background: var(--bg-secondary);
+    border-right: 1px solid var(--border-color);
+    padding: 2rem 0;
+    position: fixed;
+    height: 100vh;
+    overflow-y: auto;
+}
+
+.sidebar-header {
+    padding: 0 1.5rem 2rem;
+    border-bottom: 1px solid var(--border-color);
+}
+
+.sidebar-header h2 {
+    margin: 0;
+    font-size: 1.5rem;
+    color: var(--text-primary);
+}
+
+.sidebar-nav {
+    padding: 1.5rem 0;
+}
+
+.nav-item {
+    display: flex;
+    align-items: center;
+    gap: 0.75rem;
+    padding: 0.75rem 1.5rem;
+    color: var(--text-secondary);
+    text-decoration: none;
+    transition: all 0.2s;
+}
+
+.nav-item:hover {
+    background: var(--bg-tertiary);
+    color: var(--text-primary);
+}
+
+.nav-item.active {
+    background: var(--primary-color);
+    color: white;
+    font-weight: 600;
+}
+
+/* Main Content */
+.admin-content {
+    margin-left: 260px;
+    flex: 1;
+    padding: 2rem;
+}
+
+.page-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: flex-start;
+    margin-bottom: 2rem;
+}
+
+.page-title {
+    margin: 0 0 0.5rem;
+    font-size: 2rem;
+    color: var(--text-primary);
+}
+
+.page-subtitle {
+    margin: 0;
+    color: var(--text-secondary);
+}
+
+.header-actions {
+    display: flex;
+    gap: 0.75rem;
+}
+
+.btn {
+    padding: 0.625rem 1.25rem;
+    border: none;
+    border-radius: 8px;
+    font-size: 0.875rem;
+    font-weight: 500;
+    cursor: pointer;
+    transition: all 0.2s;
+    display: inline-flex;
+    align-items: center;
+    gap: 0.5rem;
+}
+
+.btn-primary {
+    background: var(--primary-color);
+    color: white;
+}
+
+.btn-primary:hover {
+    background: #2563EB;
+}
+
+.btn-secondary {
+    background: var(--bg-tertiary);
+    color: var(--text-primary);
+}
+
+.btn-secondary:hover {
+    background: var(--border-color);
+}
+
+.btn-icon {
+    padding: 0.5rem;
+    background: transparent;
+    border: none;
+    color: var(--text-secondary);
+    cursor: pointer;
+    border-radius: 6px;
+    transition: all 0.2s;
+}
+
+.btn-icon:hover {
+    background: var(--bg-tertiary);
+    color: var(--text-primary);
+}
+
+/* Content Card */
+.content-card {
+    background: var(--bg-secondary);
+    border: 1px solid var(--border-color);
+    border-radius: 12px;
+    overflow: hidden;
+}
+
+/* Filters */
+.filters-form {
+    padding: 1.5rem;
+}
+
+.filters-grid {
+    display: grid;
+    grid-template-columns: repeat(3, 1fr);
+    gap: 1rem;
+    margin-bottom: 1rem;
+}
+
+.filter-group {
+    display: flex;
+    flex-direction: column;
+    gap: 0.5rem;
+}
+
+.filter-group label {
+    font-size: 0.875rem;
+    font-weight: 500;
+    color: var(--text-secondary);
+}
+
+.filter-select,
+.filter-input {
+    padding: 0.625rem 0.875rem;
+    background: var(--bg-primary);
+    border: 1px solid var(--border-color);
+    border-radius: 8px;
+    color: var(--text-primary);
+    font-size: 0.875rem;
+}
+
+.filter-select:focus,
+.filter-input:focus {
+    outline: none;
+    border-color: var(--primary-color);
+}
+
+.filter-actions {
+    display: flex;
+    gap: 0.75rem;
+}
+
+/* Stats Grid */
+.stats-grid {
+    display: grid;
+    grid-template-columns: repeat(4, 1fr);
+    gap: 1.5rem;
+}
+
+.stat-card {
+    background: var(--bg-secondary);
+    border: 1px solid var(--border-color);
+    border-radius: 12px;
+    padding: 1.5rem;
+}
+
+.stat-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    margin-bottom: 1rem;
+}
+
+.stat-label {
+    font-size: 0.875rem;
+    color: var(--text-secondary);
+}
+
+.stat-value {
+    font-size: 2rem;
+    font-weight: 700;
+    color: var(--text-primary);
+}
+
+/* Table */
+.table-container {
+    overflow-x: auto;
+}
+
+.data-table {
+    width: 100%;
+    border-collapse: collapse;
+}
+
+.data-table th {
+    padding: 1rem;
+    text-align: left;
+    font-size: 0.75rem;
+    font-weight: 600;
+    text-transform: uppercase;
+    letter-spacing: 0.05em;
+    color: var(--text-secondary);
+    background: var(--bg-primary);
+    border-bottom: 1px solid var(--border-color);
+}
+
+.data-table td {
+    padding: 1rem;
+    border-bottom: 1px solid var(--border-color);
+}
+
+.data-table tbody tr:hover {
+    background: var(--bg-primary);
+}
+
+.user-info {
+    display: flex;
+    align-items: center;
+    gap: 0.75rem;
+}
+
+.user-avatar {
+    width: 36px;
+    height: 36px;
+    border-radius: 50%;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 0.875rem;
+    font-weight: 600;
+    color: white;
+}
+
+.user-name {
+    font-weight: 500;
+    color: var(--text-primary);
+}
+
+.user-email {
+    font-size: 0.8125rem;
+    color: var(--text-secondary);
+}
+
+.badge {
+    padding: 0.375rem 0.75rem;
+    border-radius: 6px;
+    font-size: 0.75rem;
+    font-weight: 600;
+    text-transform: uppercase;
+    letter-spacing: 0.05em;
+}
+
+.badge-success {
+    background: rgba(16, 185, 129, 0.1);
+    color: #10B981;
+}
+
+.badge-danger {
+    background: rgba(239, 68, 68, 0.1);
+    color: #EF4444;
+}
+
+.badge-warning {
+    background: rgba(245, 158, 11, 0.1);
+    color: #F59E0B;
+}
+
+.badge-primary {
+    background: rgba(59, 130, 246, 0.1);
+    color: #3B82F6;
+}
+
+.text-muted {
+    color: var(--text-secondary);
+    font-size: 0.875rem;
+}
+
+.ip-address {
+    padding: 0.25rem 0.5rem;
+    background: var(--bg-primary);
+    border-radius: 4px;
+    font-family: 'Courier New', monospace;
+    font-size: 0.8125rem;
+}
+
+.timestamp div:first-child {
+    color: var(--text-primary);
+}
+
+.empty-state {
+    text-align: center;
+    color: var(--text-secondary);
+}
+
+.empty-state svg {
+    opacity: 0.3;
+}
+
+/* Pagination */
+.pagination {
+    display: flex;
+    justify-content: center;
+    align-items: center;
+    gap: 0.5rem;
+    padding: 1.5rem;
+    border-top: 1px solid var(--border-color);
+}
+
+.pagination-link {
+    padding: 0.5rem 0.875rem;
+    background: var(--bg-primary);
+    border: 1px solid var(--border-color);
+    border-radius: 6px;
+    color: var(--text-primary);
+    text-decoration: none;
+    font-size: 0.875rem;
+    transition: all 0.2s;
+}
+
+.pagination-link:hover {
+    background: var(--bg-tertiary);
+}
+
+.pagination-info {
+    padding: 0.5rem 1rem;
+    color: var(--text-secondary);
+    font-size: 0.875rem;
+}
+
+/* Modal */
+.modal {
+    position: fixed;
+    top: 0;
+    left: 0;
+    right: 0;
+    bottom: 0;
+    background: rgba(0, 0, 0, 0.7);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    z-index: 1000;
+}
+
+.modal-dialog {
+    background: var(--bg-secondary);
+    border: 1px solid var(--border-color);
+    border-radius: 12px;
+    width: 90%;
+    max-height: 90vh;
+    overflow-y: auto;
+}
+
+.modal-header {
+    padding: 1.5rem;
+    border-bottom: 1px solid var(--border-color);
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+}
+
+.modal-title {
+    margin: 0;
+    font-size: 1.25rem;
+}
+
+.modal-close {
+    background: none;
+    border: none;
+    font-size: 1.5rem;
+    color: var(--text-secondary);
+    cursor: pointer;
+    padding: 0;
+    width: 2rem;
+    height: 2rem;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    border-radius: 6px;
+}
+
+.modal-close:hover {
+    background: var(--bg-tertiary);
+}
+
+.modal-body {
+    padding: 1.5rem;
+}
+
+.modal-footer {
+    padding: 1.5rem;
+    border-top: 1px solid var(--border-color);
+    display: flex;
+    justify-content: flex-end;
+    gap: 0.75rem;
+}
+
+@media (max-width: 1200px) {
+    .stats-grid,
+    .filters-grid {
+        grid-template-columns: repeat(2, 1fr);
+    }
+}
+
+@media (max-width: 768px) {
+    .admin-sidebar {
+        display: none;
+    }
+    
+    .admin-content {
+        margin-left: 0;
+    }
+    
+    .stats-grid,
+    .filters-grid {
+        grid-template-columns: 1fr;
+    }
+}
+</style>
+
+<script>
+function viewLogDetails(logId) {
+    // Fetch log details via AJAX
+    fetch(`/admin-panel/api/audit-logs/${logId}/`)
+        .then(response => response.json())
+        .then(data => {
+            if (data.success) {
+                displayLogDetails(data.log);
+            } else {
+                alert('Failed to load log details');
+            }
+        })
+        .catch(error => {
+            console.error('Error:', error);
+            alert('Failed to load log details');
+        });
+}
+
+function displayLogDetails(log) {
+    const content = `
+        <div style="display: grid; gap: 1.5rem;">
+            <div>
+                <label style="display: block; font-size: 0.875rem; color: var(--text-secondary); margin-bottom: 0.5rem;">ID</label>
+                <div>${log.id}</div>
+            </div>
+            <div>
+                <label style="display: block; font-size: 0.875rem; color: var(--text-secondary); margin-bottom: 0.5rem;">Admin User</label>
+                <div>${log.admin_user || 'System'}</div>
+            </div>
+            <div>
+                <label style="display: block; font-size: 0.875rem; color: var(--text-secondary); margin-bottom: 0.5rem;">Action</label>
+                <div><span class="badge badge-primary">${log.action}</span></div>
+            </div>
+            <div>
+                <label style="display: block; font-size: 0.875rem; color: var(--text-secondary); margin-bottom: 0.5rem;">Target</label>
+                <div>${log.target_model} #${log.target_id || 'N/A'}</div>
+            </div>
+            <div>
+                <label style="display: block; font-size: 0.875rem; color: var(--text-secondary); margin-bottom: 0.5rem;">Description</label>
+                <div>${log.target_description}</div>
+            </div>
+            ${log.old_values ? `
+            <div>
+                <label style="display: block; font-size: 0.875rem; color: var(--text-secondary); margin-bottom: 0.5rem;">Old Values</label>
+                <pre style="background: var(--bg-primary); padding: 1rem; border-radius: 8px; overflow-x: auto;">${JSON.stringify(log.old_values, null, 2)}</pre>
+            </div>
+            ` : ''}
+            ${log.new_values ? `
+            <div>
+                <label style="display: block; font-size: 0.875rem; color: var(--text-secondary); margin-bottom: 0.5rem;">New Values</label>
+                <pre style="background: var(--bg-primary); padding: 1rem; border-radius: 8px; overflow-x: auto;">${JSON.stringify(log.new_values, null, 2)}</pre>
+            </div>
+            ` : ''}
+            <div>
+                <label style="display: block; font-size: 0.875rem; color: var(--text-secondary); margin-bottom: 0.5rem;">IP Address</label>
+                <div><code class="ip-address">${log.ip_address || 'N/A'}</code></div>
+            </div>
+            ${log.user_agent ? `
+            <div>
+                <label style="display: block; font-size: 0.875rem; color: var(--text-secondary); margin-bottom: 0.5rem;">User Agent</label>
+                <div style="font-size: 0.8125rem; color: var(--text-secondary);">${log.user_agent}</div>
+            </div>
+            ` : ''}
+            ${log.notes ? `
+            <div>
+                <label style="display: block; font-size: 0.875rem; color: var(--text-secondary); margin-bottom: 0.5rem;">Notes</label>
+                <div>${log.notes}</div>
+            </div>
+            ` : ''}
+            <div>
+                <label style="display: block; font-size: 0.875rem; color: var(--text-secondary); margin-bottom: 0.5rem;">Timestamp</label>
+                <div>${log.created_at}</div>
+            </div>
+        </div>
+    `;
+    
+    document.getElementById('logDetailContent').innerHTML = content;
+    document.getElementById('logDetailModal').style.display = 'flex';
+}
+
+function closeModal(modalId) {
+    document.getElementById(modalId).style.display = 'none';
+}
+
+function refreshLogs() {
+    location.reload();
+}
+
+function exportLogs() {
+    // Get current filters
+    const params = new URLSearchParams(window.location.search);
+    window.location.href = '/admin-panel/api/audit-logs/export/?' + params.toString();
+}
+
+// Close modal on background click
+document.addEventListener('click', function(event) {
+    if (event.target.classList.contains('modal')) {
+        event.target.style.display = 'none';
+    }
+});
+</script>
