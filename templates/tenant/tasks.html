@@ -602,76 +602,11 @@
 }
 </style>
 
-<script>
-// View switching
-document.querySelectorAll('.view-btn').forEach(btn => {
-    btn.addEventListener('click', function() {
-        document.querySelectorAll('.view-btn').forEach(b => b.classList.remove('active'));
-        this.classList.add('active');
-        
-        const view = this.dataset.view;
-        document.querySelectorAll('.tasks-view').forEach(v => v.classList.remove('active'));
-        document.getElementById(`${view}View`).classList.add('active');
-    });
-});
-
-function viewTask(taskId) {
-    window.location.href = `/tasks/${taskId}/`;
-}
-
-function editTask(taskId) {
-    // Open edit modal
-    console.log('Edit task:', taskId);
-}
-
-async function deleteTask(taskId) {
-    if (!confirm('Delete this task?')) return;
-    
-    try {
-        await window.SaaSPlatform.apiRequest(`/api/tasks/${taskId}/`, {
-            method: 'DELETE'
-        });
-        window.SaaSPlatform.showToast('Task deleted', 'success');
-        location.reload();
-    } catch (error) {
-        window.SaaSPlatform.showToast('Failed to delete task', 'error');
-    }
-}
-
-async function submitCreateTask() {
-    const form = document.getElementById('createTaskForm');
-    const formData = new FormData(form);
-    const data = Object.fromEntries(formData.entries());
-    
-    try {
-        const response = await window.SaaSPlatform.apiRequest('/api/tasks/', {
-            method: 'POST',
-            body: JSON.stringify(data)
-        });
-        
-        if (response.id) {
-            window.SaaSPlatform.showToast('Task created successfully!', 'success');
-            closeModal('createTaskModal');
-            location.reload();
-        }
-    } catch (error) {
-        window.SaaSPlatform.showToast('Failed to create task', 'error');
-    }
-}
-
-// Quick filters
-document.querySelectorAll('.filter-chip').forEach(chip => {
-    chip.addEventListener('click', function() {
-        const filter = this.dataset.filter;
-        // Implement filtering logic
-        console.log('Filter:', filter);
-    });
-});
-
-// Search
-document.getElementById('searchTasks')?.addEventListener('input', function(e) {
-    const searchTerm = e.target.value.toLowerCase();
-    // Implement search logic
-});
-</script>
+<script src="https://cdn.jsdelivr.net/npm/fullcalendar@6.1.9/index.global.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/sortablejs@1.15.0/Sortable.min.js"></script>
+<script src="{% static 'js/tasks-kanban.js' %}"></script>
+<script src="{% static 'js/tasks-list.js' %}"></script>
+<script src="{% static 'js/tasks-calendar.js' %}"></script>
+<script src="{% static 'js/task-modal.js' %}"></script>
+<script src="{% static 'js/tasks-main.js' %}"></script>
 {% endblock %}

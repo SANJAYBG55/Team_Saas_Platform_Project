@@ -56,6 +56,9 @@
                     <a href="/admin-panel/payments/" class="nav-item {% if '/admin-panel/payments/' in request.path %}active{% endif %}">
                         <i class="fas fa-credit-card"></i>
                         <span>Payments</span>
+                        {% if pending_payments_count > 0 %}
+                        <span class="badge badge-warning">{{ pending_payments_count }}</span>
+                        {% endif %}
                     </a>
                     <a href="/admin-panel/analytics/" class="nav-item {% if '/admin-panel/analytics/' in request.path %}active{% endif %}">
                         <i class="fas fa-chart-pie"></i>

@@ -1,0 +1,357 @@
+{% extends "layouts/app_enhanced.html" %}
+{% load static %}
+
+{% block title %}Payment Verification - {{ block.super }}{% endblock %}
+
+{% block breadcrumb %}
+<a href="/admin-panel/dashboard/">Admin Panel</a>
+<i class="fas fa-chevron-right" style="font-size: 12px; color: var(--text-tertiary);"></i>
+<span>Payment Verification</span>
+{% endblock %}
+
+{% block app_content %}
+<!-- Page Header -->
+<div class="page-header">
+    <div>
+        <h1 class="page-title">Payment Verification</h1>
+        <p class="page-subtitle">Review and verify tenant payment submissions</p>
+    </div>
+    <div class="page-actions">
+        <button class="btn btn-ghost" onclick="location.reload()">
+            <i class="fas fa-sync-alt"></i>
+            Refresh
+        </button>
+        <button class="btn btn-primary" onclick="exportPayments()">
+            <i class="fas fa-download"></i>
+            Export
+        </button>
+    </div>
+</div>
+
+<!-- Summary Cards -->
+<div class="stats-grid">
+    <div class="stat-card">
+        <div class="stat-icon warning">
+            <i class="fas fa-clock"></i>
+        </div>
+        <div class="stat-content">
+            <div class="stat-value">{{ pending_payments|default:0 }}</div>
+            <div class="stat-label">Pending Verification</div>
+            <div class="stat-change">
+                <i class="fas fa-exclamation-circle"></i>
+                Requires attention
+            </div>
+        </div>
+    </div>
+
+    <div class="stat-card">
+        <div class="stat-icon success">
+            <i class="fas fa-check-circle"></i>
+        </div>
+        <div class="stat-content">
+            <div class="stat-value">{{ approved_today|default:0 }}</div>
+            <div class="stat-label">Approved Today</div>
+            <div class="stat-change positive">
+                <i class="fas fa-arrow-up"></i>
+                {{ approved_this_week|default:0 }} this week
+            </div>
+        </div>
+    </div>
+
+    <div class="stat-card">
+        <div class="stat-icon danger">
+            <i class="fas fa-times-circle"></i>
+        </div>
+        <div class="stat-content">
+            <div class="stat-value">{{ rejected_today|default:0 }}</div>
+            <div class="stat-label">Rejected Today</div>
+            <div class="stat-change">
+                {{ rejected_this_week|default:0 }} this week
+            </div>
+        </div>
+    </div>
+
+    <div class="stat-card">
+        <div class="stat-icon primary">
+            <i class="fas fa-dollar-sign"></i>
+        </div>
+        <div class="stat-content">
+            <div class="stat-value">${{ total_pending_amount|default:0|floatformat:2 }}</div>
+            <div class="stat-label">Total Pending Amount</div>
+            <div class="stat-change">
+                Across {{ pending_payments|default:0 }} payments
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- Main Content -->
+<div class="card">
+    <div class="card-header">
+        <h3 class="card-title">Payment Submissions</h3>
+    </div>
+
+    <!-- Filters and Search -->
+    <div class="table-toolbar">
+        <div class="search-box">
+            <i class="fas fa-search"></i>
+            <input type="text" id="paymentSearch" placeholder="Search by tenant, transaction ID..." onkeyup="filterPayments()">
+        </div>
+        <div class="toolbar-filters">
+            <select class="form-control" id="statusFilter" onchange="filterPayments()">
+                <option value="">All Statuses</option>
+                <option value="pending" {% if status_filter == 'pending' %}selected{% endif %}>Pending</option>
+                <option value="approved" {% if status_filter == 'approved' %}selected{% endif %}>Approved</option>
+                <option value="rejected" {% if status_filter == 'rejected' %}selected{% endif %}>Rejected</option>
+            </select>
+            <select class="form-control" id="methodFilter" onchange="filterPayments()">
+                <option value="">All Methods</option>
+                <option value="card">Card</option>
+                <option value="bank_transfer">Bank Transfer</option>
+                <option value="paypal">PayPal</option>
+                <option value="manual">Manual</option>
+            </select>
+            <select class="form-control" id="amountFilter" onchange="filterPayments()">
+                <option value="">All Amounts</option>
+                <option value="0-50">$0 - $50</option>
+                <option value="50-100">$50 - $100</option>
+                <option value="100-500">$100 - $500</option>
+                <option value="500+">$500+</option>
+            </select>
+        </div>
+    </div>
+
+    <!-- Payments Table -->
+    <div class="table-responsive">
+        <table class="table" id="paymentsTable">
+            <thead>
+                <tr>
+                    <th>
+                        <input type="checkbox" id="selectAll" onchange="toggleSelectAll()">
+                    </th>
+                    <th>Tenant</th>
+                    <th>Amount</th>
+                    <th>Payment Method</th>
+                    <th>Transaction ID</th>
+                    <th>Status</th>
+                    <th>Submitted</th>
+                    <th class="text-right">Actions</th>
+                </tr>
+            </thead>
+            <tbody>
+                {% if payments %}
+                {% for payment in payments %}
+                {% with active_sub=payment.tenant.subscriptions.all|first %}
+                <tr data-status="{{ payment.verification_status|lower }}" 
+                    data-method="{{ payment.payment_method|lower }}" 
+                    data-amount="{{ payment.amount }}">
+                    <td>
+                        <input type="checkbox" class="payment-checkbox" value="{{ payment.id }}">
+                    </td>
+                    <td>
+                        <div class="tenant-info">
+                            <div class="tenant-logo">
+                                {% if payment.tenant.logo %}
+                                <img src="{{ payment.tenant.logo.url }}" alt="{{ payment.tenant.name }}">
+                                {% else %}
+                                <div class="avatar">{{ payment.tenant.name|first }}</div>
+                                {% endif %}
+                            </div>
+                            <div>
+                                <div class="tenant-name">{{ payment.tenant.name }}</div>
+                                <div class="tenant-domain">{{ payment.tenant.slug }}.yourdomain.com</div>
+                                {% if active_sub %}
+                                <span class="badge badge-sm badge-primary">{{ active_sub.plan.name }}</span>
+                                {% endif %}
+                            </div>
+                        </div>
+                    </td>
+                    <td>
+                        <div class="payment-amount">
+                            <strong>${{ payment.amount|floatformat:2 }}</strong>
+                            <div class="text-muted">{{ payment.currency }}</div>
+                        </div>
+                    </td>
+                    <td>
+                        {% if payment.payment_method == 'CARD' %}
+                        <span class="badge badge-info"><i class="fas fa-credit-card"></i> Card</span>
+                        {% elif payment.payment_method == 'BANK_TRANSFER' %}
+                        <span class="badge badge-primary"><i class="fas fa-university"></i> Bank Transfer</span>
+                        {% elif payment.payment_method == 'PAYPAL' %}
+                        <span class="badge badge-info"><i class="fab fa-paypal"></i> PayPal</span>
+                        {% elif payment.payment_method == 'MANUAL' %}
+                        <span class="badge badge-warning"><i class="fas fa-hand-holding-usd"></i> Manual</span>
+                        {% else %}
+                        <span class="badge badge-secondary">{{ payment.payment_method }}</span>
+                        {% endif %}
+                    </td>
+                    <td>
+                        {% if payment.transaction_id %}
+                        <code style="font-size: 0.875rem;">{{ payment.transaction_id|truncatechars:20 }}</code>
+                        {% else %}
+                        <span class="text-muted">N/A</span>
+                        {% endif %}
+                    </td>
+                    <td>
+                        {% if payment.verification_status == 'PENDING' %}
+                        <span class="badge badge-warning badge-dot">Pending</span>
+                        {% elif payment.verification_status == 'APPROVED' %}
+                        <span class="badge badge-success badge-dot">Approved</span>
+                        {% elif payment.verification_status == 'REJECTED' %}
+                        <span class="badge badge-danger badge-dot">Rejected</span>
+                        {% else %}
+                        <span class="badge badge-secondary badge-dot">{{ payment.verification_status }}</span>
+                        {% endif %}
+                    </td>
+                    <td>
+                        <div>{{ payment.created_at|date:"M d, Y" }}</div>
+                        <div class="text-muted">{{ payment.created_at|timesince }} ago</div>
+                    </td>
+                    <td class="text-right">
+                        <div class="btn-group">
+                            <button class="btn btn-sm btn-ghost" onclick="viewPaymentDetails({{ payment.id }})" title="View Details">
+                                <i class="fas fa-eye"></i>
+                            </button>
+                            {% if payment.verification_status == 'PENDING' %}
+                            <button class="btn btn-sm btn-success" onclick="approvePayment({{ payment.id }})" title="Approve">
+                                <i class="fas fa-check"></i>
+                            </button>
+                            <button class="btn btn-sm btn-danger" onclick="rejectPayment({{ payment.id }})" title="Reject">
+                                <i class="fas fa-times"></i>
+                            </button>
+                            {% endif %}
+                        </div>
+                    </td>
+                </tr>
+                {% endwith %}
+                {% endfor %}
+                {% else %}
+                <tr>
+                    <td colspan="8">
+                        <div class="empty-state">
+                            <div class="empty-state-icon">
+                                <i class="fas fa-receipt"></i>
+                            </div>
+                            <h3 class="empty-state-title">No Payment Submissions</h3>
+                            <p class="empty-state-text">There are no payment submissions to verify at this time.</p>
+                        </div>
+                    </td>
+                </tr>
+                {% endif %}
+            </tbody>
+        </table>
+    </div>
+
+    <!-- Pagination -->
+    {% if payments.has_other_pages %}
+    <div class="table-footer">
+        <div class="table-info">
+            Showing {{ payments.start_index }} to {{ payments.end_index }} of {{ payments.paginator.count }} payments
+        </div>
+        <div class="pagination">
+            {% if payments.has_previous %}
+            <button class="pagination-item" onclick="goToPage(1)">
+                <i class="fas fa-angle-double-left"></i>
+            </button>
+            <button class="pagination-item" onclick="goToPage({{ payments.previous_page_number }})">
+                <i class="fas fa-angle-left"></i>
+            </button>
+            {% endif %}
+
+            {% for num in payments.paginator.page_range %}
+            {% if payments.number == num %}
+            <button class="pagination-item active">{{ num }}</button>
+            {% elif num > payments.number|add:'-3' and num < payments.number|add:'3' %}
+            <button class="pagination-item" onclick="goToPage({{ num }})">{{ num }}</button>
+            {% endif %}
+            {% endfor %}
+
+            {% if payments.has_next %}
+            <button class="pagination-item" onclick="goToPage({{ payments.next_page_number }})">
+                <i class="fas fa-angle-right"></i>
+            </button>
+            <button class="pagination-item" onclick="goToPage({{ payments.paginator.num_pages }})">
+                <i class="fas fa-angle-double-right"></i>
+            </button>
+            {% endif %}
+        </div>
+    </div>
+    {% endif %}
+</div>
+
+<style>
+/* Payment-specific styles */
+.payment-amount {
+    display: flex;
+    flex-direction: column;
+    gap: 4px;
+}
+
+.payment-amount strong {
+    font-size: 1.125rem;
+    color: var(--text-primary);
+}
+
+.tenant-info {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+}
+
+.tenant-logo {
+    width: 40px;
+    height: 40px;
+    border-radius: 8px;
+    overflow: hidden;
+    flex-shrink: 0;
+}
+
+.tenant-logo img {
+    width: 100%;
+    height: 100%;
+    object-fit: cover;
+}
+
+.tenant-name {
+    font-weight: 600;
+    color: var(--text-primary);
+    margin-bottom: 4px;
+}
+
+.tenant-domain {
+    font-size: 0.875rem;
+    color: var(--text-secondary);
+    margin-bottom: 4px;
+}
+
+.badge-sm {
+    padding: 2px 8px;
+    font-size: 0.75rem;
+}
+
+code {
+    background: var(--background-secondary);
+    padding: 4px 8px;
+    border-radius: 4px;
+    font-family: 'Courier New', monospace;
+}
+
+@media (max-width: 768px) {
+    .stats-grid {
+        grid-template-columns: 1fr;
+    }
+    
+    .table-toolbar {
+        flex-direction: column;
+        gap: 12px;
+    }
+    
+    .toolbar-filters {
+        width: 100%;
+        flex-direction: column;
+    }
+}
+</style>
+
+<script src="{% static 'js/payment-verification.js' %}"></script>
+{% endblock %}

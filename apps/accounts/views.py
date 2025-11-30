@@ -241,3 +241,280 @@ def reset_password(request):
         return Response({
             'error': 'Invalid or expired token'
         }, status=status.HTTP_400_BAD_REQUEST)
+
+
+# =============================
+# Tenant Signup Views
+# =============================
+
+from django.shortcuts import render
+from django.views.decorators.http import require_http_methods
+from django.http import JsonResponse
+import json
+from django.utils.text import slugify
+
+
+def signup_page(request):
+    """Render the signup page."""
+    return render(request, 'auth/signup.html')
+
+
+@api_view(['GET'])
+@permission_classes([AllowAny])
+def check_domain_availability(request):
+    """Check if domain is available."""
+    from apps.tenants.models import Tenant
+    
+    domain = request.GET.get('domain', '').lower().strip()
+    
+    if not domain:
+        return Response({
+            'available': False,
+            'message': 'Domain is required'
+        }, status=status.HTTP_400_BAD_REQUEST)
+    
+    # Check if domain exists
+    exists = Tenant.objects.filter(slug=domain).exists()
+    
+    return Response({
+        'available': not exists,
+        'domain': domain
+    })
+
+
+@api_view(['GET'])
+@permission_classes([AllowAny])
+def get_plans(request):
+    """Get all available subscription plans."""
+    from apps.subscriptions.models import Plan
+    
+    plans = Plan.objects.filter(is_active=True).order_by('sort_order', 'price')
+    
+    plans_data = []
+    for plan in plans:
+        plans_data.append({
+            'id': plan.id,
+            'name': plan.name,
+            'slug': plan.slug,
+            'description': plan.description,
+            'price_monthly': float(plan.price) if plan.billing_interval == 'MONTHLY' else float(plan.price),
+            'price_annual': float(plan.price) if plan.billing_interval == 'YEARLY' else float(plan.price * 12 * 0.8),  # 20% discount
+            'currency': plan.currency,
+            'max_users': plan.max_users,
+            'max_teams': plan.max_teams,
+            'max_projects': plan.max_projects,
+            'max_storage_gb': plan.max_storage_gb,
+            'enable_api_access': plan.enable_api_access,
+            'enable_priority_support': plan.enable_priority_support,
+            'enable_custom_branding': plan.enable_custom_branding,
+            'enable_sso': plan.enable_sso,
+            'is_popular': plan.is_popular,
+            'trial_days': plan.trial_days
+        })
+    
+    return Response({
+        'success': True,
+        'plans': plans_data
+    })
+
+
+@api_view(['POST'])
+@permission_classes([AllowAny])
+def complete_signup(request):
+    """Complete the signup process."""
+    from apps.tenants.models import Tenant, Domain
+    from apps.subscriptions.models import Plan, Subscription, Payment
+    from django.db import transaction
+    
+    try:
+        # Get form data
+        data = request.data
+        
+        company_name = data.get('company_name')
+        domain = data.get('domain', '').lower().strip()
+        admin_name = data.get('admin_name')
+        email = data.get('email')
+        password = data.get('password')
+        plan_id = data.get('plan_id')
+        billing_cycle = data.get('billing_cycle', 'monthly')
+        payment_method = data.get('payment_method', 'card')
+        stripe_payment_method = data.get('stripe_payment_method')
+        
+        # Validate required fields
+        if not all([company_name, domain, admin_name, email, password, plan_id]):
+            return Response({
+                'success': False,
+                'message': 'All fields are required'
+            }, status=status.HTTP_400_BAD_REQUEST)
+        
+        # Check if domain is taken
+        if Tenant.objects.filter(slug=domain).exists():
+            return Response({
+                'success': False,
+                'message': 'Domain is already taken'
+            }, status=status.HTTP_400_BAD_REQUEST)
+        
+        # Check if email is taken
+        if User.objects.filter(email=email).exists():
+            return Response({
+                'success': False,
+                'message': 'Email is already registered'
+            }, status=status.HTTP_400_BAD_REQUEST)
+        
+        # Get plan
+        plan = Plan.objects.get(id=plan_id)
+        
+        # Calculate trial end date
+        trial_end = timezone.now() + timedelta(days=plan.trial_days)
+        
+        with transaction.atomic():
+            # Create tenant
+            tenant = Tenant.objects.create(
+                name=company_name,
+                company_name=company_name,
+                slug=domain,
+                company_email=email,
+                status='PENDING',
+                is_approved=False,
+                trial_ends_at=trial_end,
+                max_users=plan.max_users,
+                max_teams=plan.max_teams,
+                max_projects=plan.max_projects,
+                max_storage_gb=plan.max_storage_gb
+            )
+            
+            # Create domain
+            Domain.objects.create(
+                tenant=tenant,
+                domain=f"{domain}.yourdomain.com",
+                domain_type='SUBDOMAIN',
+                is_primary=True,
+                is_verified=False
+            )
+            
+            # Create admin user
+            name_parts = admin_name.split(' ', 1)
+            first_name = name_parts[0]
+            last_name = name_parts[1] if len(name_parts) > 1 else ''
+            
+            user = User.objects.create_user(
+                email=email,
+                username=email.split('@')[0],
+                password=password,
+                first_name=first_name,
+                last_name=last_name,
+                tenant=tenant,
+                role='OWNER',
+                is_active=True
+            )
+            
+            # Create user preferences
+            UserPreference.objects.create(user=user)
+            
+            # Create subscription
+            subscription = Subscription.objects.create(
+                tenant=tenant,
+                plan=plan,
+                status='TRIAL',
+                current_period_start=timezone.now(),
+                current_period_end=trial_end,
+                trial_start=timezone.now(),
+                trial_end=trial_end,
+                auto_renew=True
+            )
+            
+            # Create payment record
+            payment_amount = plan.price if billing_cycle == 'monthly' else plan.price * 12 * 0.8
+            
+            payment = Payment.objects.create(
+                subscription=subscription,
+                tenant=tenant,
+                amount=payment_amount,
+                currency=plan.currency,
+                payment_method=payment_method.upper(),
+                status='PENDING',
+                verification_status='PENDING',
+                description=f'Signup payment for {plan.name} plan'
+            )
+            
+            # Handle Stripe payment method
+            if payment_method == 'card' and stripe_payment_method:
+                payment.transaction_id = stripe_payment_method
+                payment.payment_gateway = 'stripe'
+                # In production, you would charge the card after trial
+                # For now, just save the payment method for later
+            
+            # Handle payment proof upload
+            if 'payment_proof' in request.FILES:
+                payment.payment_proof = request.FILES['payment_proof']
+                payment.save()
+            
+            # Send verification email
+            token = generate_token()
+            EmailVerification.objects.create(
+                user=user,
+                token=token,
+                expires_at=timezone.now() + timedelta(days=1)
+            )
+            
+            # TODO: Send welcome email with verification link
+            # TODO: Send notification to admins about new signup
+            
+            return Response({
+                'success': True,
+                'message': 'Signup successful! Please check your email to verify your account.',
+                'tenant_id': tenant.id,
+                'user_id': user.id
+            }, status=status.HTTP_201_CREATED)
+    
+    except Plan.DoesNotExist:
+        return Response({
+            'success': False,
+            'message': 'Invalid plan selected'
+        }, status=status.HTTP_400_BAD_REQUEST)
+    
+    except Exception as e:
+        return Response({
+            'success': False,
+            'message': str(e)
+        }, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
+
+
+@api_view(['POST'])
+@permission_classes([AllowAny])
+def resend_verification_email(request):
+    """Resend verification email."""
+    email = request.data.get('email')
+    
+    if not email:
+        return Response({
+            'success': False,
+            'message': 'Email is required'
+        }, status=status.HTTP_400_BAD_REQUEST)
+    
+    try:
+        user = User.objects.get(email=email)
+        
+        # Delete old verification tokens
+        EmailVerification.objects.filter(user=user, is_verified=False).delete()
+        
+        # Create new token
+        token = generate_token()
+        EmailVerification.objects.create(
+            user=user,
+            token=token,
+            expires_at=timezone.now() + timedelta(days=1)
+        )
+        
+        # TODO: Send email
+        
+        return Response({
+            'success': True,
+            'message': 'Verification email sent'
+        })
+    
+    except User.DoesNotExist:
+        return Response({
+            'success': False,
+            'message': 'User not found'
+        }, status=status.HTTP_404_NOT_FOUND)

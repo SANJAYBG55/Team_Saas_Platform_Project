@@ -1,0 +1,770 @@
+{% extends "base.html" %}
+{% load static %}
+
+{% block title %}Sign Up - Team SaaS Platform{% endblock %}
+
+{% block content %}
+<div class="signup-container">
+    <!-- Progress Indicator -->
+    <div class="signup-progress">
+        <div class="progress-steps">
+            <div class="progress-step active" data-step="1">
+                <div class="step-number">1</div>
+                <div class="step-label">Company Info</div>
+            </div>
+            <div class="progress-line"></div>
+            <div class="progress-step" data-step="2">
+                <div class="step-number">2</div>
+                <div class="step-label">Choose Plan</div>
+            </div>
+            <div class="progress-line"></div>
+            <div class="progress-step" data-step="3">
+                <div class="step-number">3</div>
+                <div class="step-label">Payment</div>
+            </div>
+            <div class="progress-line"></div>
+            <div class="progress-step" data-step="4">
+                <div class="step-number">4</div>
+                <div class="step-label">Verify Email</div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Step 1: Company Information -->
+    <div class="signup-step" id="step1" style="display: block;">
+        <div class="signup-card">
+            <div class="signup-header">
+                <h1>Create Your Account</h1>
+                <p>Start your 14-day free trial. No credit card required.</p>
+            </div>
+
+            <form id="companyInfoForm" class="signup-form">
+                <div class="form-row">
+                    <div class="form-group">
+                        <label class="form-label form-label-required">Company Name</label>
+                        <input type="text" name="company_name" class="form-control" placeholder="Acme Inc." required>
+                        <div class="form-error" id="error-company_name"></div>
+                    </div>
+                </div>
+
+                <div class="form-row">
+                    <div class="form-group">
+                        <label class="form-label form-label-required">Company Domain</label>
+                        <div class="input-group">
+                            <input type="text" name="domain" class="form-control" placeholder="acme" required pattern="[a-z0-9-]+" title="Only lowercase letters, numbers, and hyphens">
+                            <span class="input-group-text">.yourdomain.com</span>
+                        </div>
+                        <div class="form-help">This will be your unique URL</div>
+                        <div class="form-error" id="error-domain"></div>
+                    </div>
+                </div>
+
+                <div class="form-row">
+                    <div class="form-group">
+                        <label class="form-label form-label-required">Your Full Name</label>
+                        <input type="text" name="admin_name" class="form-control" placeholder="John Doe" required>
+                        <div class="form-error" id="error-admin_name"></div>
+                    </div>
+                </div>
+
+                <div class="form-row">
+                    <div class="form-group">
+                        <label class="form-label form-label-required">Work Email</label>
+                        <input type="email" name="email" class="form-control" placeholder="john@acme.com" required>
+                        <div class="form-error" id="error-email"></div>
+                    </div>
+                </div>
+
+                <div class="form-row">
+                    <div class="form-group">
+                        <label class="form-label form-label-required">Password</label>
+                        <div class="password-input">
+                            <input type="password" name="password" id="password" class="form-control" placeholder="Min. 8 characters" required minlength="8">
+                            <button type="button" class="password-toggle" onclick="togglePassword('password')">
+                                <i class="fas fa-eye"></i>
+                            </button>
+                        </div>
+                        <div class="password-strength" id="passwordStrength"></div>
+                        <div class="form-error" id="error-password"></div>
+                    </div>
+                </div>
+
+                <div class="form-row">
+                    <div class="form-group">
+                        <label class="form-label form-label-required">Confirm Password</label>
+                        <div class="password-input">
+                            <input type="password" name="password_confirm" id="password_confirm" class="form-control" placeholder="Re-enter password" required>
+                            <button type="button" class="password-toggle" onclick="togglePassword('password_confirm')">
+                                <i class="fas fa-eye"></i>
+                            </button>
+                        </div>
+                        <div class="form-error" id="error-password_confirm"></div>
+                    </div>
+                </div>
+
+                <div class="form-row">
+                    <label class="checkbox">
+                        <input type="checkbox" name="terms" required>
+                        I agree to the <a href="/terms" target="_blank">Terms of Service</a> and <a href="/privacy" target="_blank">Privacy Policy</a>
+                    </label>
+                </div>
+
+                <button type="submit" class="btn btn-primary btn-lg btn-block">
+                    Continue to Plans
+                    <i class="fas fa-arrow-right"></i>
+                </button>
+            </form>
+
+            <div class="signup-footer">
+                Already have an account? <a href="/login">Sign in</a>
+            </div>
+        </div>
+    </div>
+
+    <!-- Step 2: Plan Selection -->
+    <div class="signup-step" id="step2" style="display: none;">
+        <div class="signup-card wide">
+            <div class="signup-header">
+                <h1>Choose Your Plan</h1>
+                <p>Start with a 14-day free trial. Cancel anytime.</p>
+            </div>
+
+            <div class="billing-toggle">
+                <button class="billing-option active" data-billing="monthly">Monthly</button>
+                <button class="billing-option" data-billing="annual">Annual <span class="badge badge-success">Save 20%</span></button>
+            </div>
+
+            <div class="pricing-grid" id="pricingGrid">
+                <!-- Plans will be loaded dynamically -->
+            </div>
+
+            <div class="signup-actions">
+                <button type="button" class="btn btn-secondary" onclick="previousStep(2)">
+                    <i class="fas fa-arrow-left"></i>
+                    Back
+                </button>
+            </div>
+        </div>
+    </div>
+
+    <!-- Step 3: Payment Information -->
+    <div class="signup-step" id="step3" style="display: none;">
+        <div class="signup-card">
+            <div class="signup-header">
+                <h1>Payment Information</h1>
+                <p>Your card won't be charged until after your 14-day trial.</p>
+            </div>
+
+            <div class="selected-plan-summary" id="planSummary">
+                <!-- Plan summary will be shown here -->
+            </div>
+
+            <form id="paymentForm" class="signup-form">
+                <div class="payment-method-selector">
+                    <label class="payment-method active">
+                        <input type="radio" name="payment_method" value="card" checked>
+                        <div class="method-content">
+                            <i class="fas fa-credit-card"></i>
+                            <span>Credit/Debit Card</span>
+                        </div>
+                    </label>
+                    <label class="payment-method">
+                        <input type="radio" name="payment_method" value="bank_transfer">
+                        <div class="method-content">
+                            <i class="fas fa-university"></i>
+                            <span>Bank Transfer</span>
+                        </div>
+                    </label>
+                </div>
+
+                <!-- Credit Card Form -->
+                <div id="cardPaymentSection" class="payment-section">
+                    <div class="form-row">
+                        <div class="form-group">
+                            <label class="form-label form-label-required">Card Number</label>
+                            <div id="card-number" class="stripe-element"></div>
+                            <div class="form-error" id="error-card_number"></div>
+                        </div>
+                    </div>
+
+                    <div class="form-row two-col">
+                        <div class="form-group">
+                            <label class="form-label form-label-required">Expiry Date</label>
+                            <div id="card-expiry" class="stripe-element"></div>
+                            <div class="form-error" id="error-card_expiry"></div>
+                        </div>
+                        <div class="form-group">
+                            <label class="form-label form-label-required">CVC</label>
+                            <div id="card-cvc" class="stripe-element"></div>
+                            <div class="form-error" id="error-card_cvc"></div>
+                        </div>
+                    </div>
+
+                    <div class="form-row">
+                        <div class="form-group">
+                            <label class="form-label form-label-required">Cardholder Name</label>
+                            <input type="text" name="cardholder_name" class="form-control" placeholder="John Doe" required>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Bank Transfer Section -->
+                <div id="bankTransferSection" class="payment-section" style="display: none;">
+                    <div class="alert alert-info">
+                        <i class="fas fa-info-circle"></i>
+                        <div>
+                            <strong>Bank Transfer Instructions:</strong>
+                            <p>After submitting, you'll receive bank details via email. Your account will be activated once we verify your payment.</p>
+                        </div>
+                    </div>
+
+                    <div class="form-row">
+                        <div class="form-group">
+                            <label class="form-label">Upload Payment Proof (Optional)</label>
+                            <input type="file" name="payment_proof" class="form-control" accept="image/*,.pdf">
+                            <div class="form-help">Upload receipt or transaction screenshot</div>
+                        </div>
+                    </div>
+                </div>
+
+                <div class="form-row">
+                    <label class="checkbox">
+                        <input type="checkbox" name="save_payment" checked>
+                        Save payment method for future billing
+                    </label>
+                </div>
+
+                <div class="trial-notice">
+                    <i class="fas fa-shield-alt"></i>
+                    <div>
+                        <strong>Risk-free 14-day trial</strong>
+                        <p>Cancel anytime before {{ trial_end_date }} and you won't be charged.</p>
+                    </div>
+                </div>
+
+                <div class="signup-actions">
+                    <button type="button" class="btn btn-secondary" onclick="previousStep(3)">
+                        <i class="fas fa-arrow-left"></i>
+                        Back
+                    </button>
+                    <button type="submit" class="btn btn-primary btn-lg">
+                        <i class="fas fa-lock"></i>
+                        Complete Sign Up
+                    </button>
+                </div>
+            </form>
+        </div>
+    </div>
+
+    <!-- Step 4: Email Verification -->
+    <div class="signup-step" id="step4" style="display: none;">
+        <div class="signup-card">
+            <div class="success-icon">
+                <i class="fas fa-envelope-open-text"></i>
+            </div>
+            <div class="signup-header centered">
+                <h1>Verify Your Email</h1>
+                <p>We've sent a verification link to <strong id="userEmail"></strong></p>
+            </div>
+
+            <div class="verification-instructions">
+                <div class="instruction-step">
+                    <div class="step-icon">1</div>
+                    <div class="step-text">Check your email inbox (and spam folder)</div>
+                </div>
+                <div class="instruction-step">
+                    <div class="step-icon">2</div>
+                    <div class="step-text">Click the verification link in the email</div>
+                </div>
+                <div class="instruction-step">
+                    <div class="step-icon">3</div>
+                    <div class="step-text">You'll be redirected to your dashboard</div>
+                </div>
+            </div>
+
+            <div class="resend-section">
+                <p>Didn't receive the email?</p>
+                <button type="button" class="btn btn-outline" onclick="resendVerificationEmail()" id="resendBtn">
+                    <i class="fas fa-redo"></i>
+                    Resend Email
+                </button>
+                <div id="resendTimer" class="resend-timer" style="display: none;"></div>
+            </div>
+
+            <div class="signup-footer centered">
+                <a href="/login">Return to Login</a>
+            </div>
+        </div>
+    </div>
+</div>
+
+<style>
+/* Signup Styles */
+.signup-container {
+    min-height: 100vh;
+    background: linear-gradient(135deg, rgba(37, 99, 235, 0.05) 0%, rgba(147, 51, 234, 0.05) 100%);
+    padding: 40px 20px;
+}
+
+.signup-progress {
+    max-width: 900px;
+    margin: 0 auto 40px;
+}
+
+.progress-steps {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+}
+
+.progress-step {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 8px;
+    position: relative;
+}
+
+.step-number {
+    width: 48px;
+    height: 48px;
+    border-radius: 50%;
+    background: var(--background-secondary);
+    border: 2px solid var(--border-color);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-weight: 700;
+    color: var(--text-secondary);
+    transition: all 0.3s ease;
+}
+
+.progress-step.active .step-number {
+    background: var(--primary);
+    border-color: var(--primary);
+    color: white;
+}
+
+.progress-step.completed .step-number {
+    background: var(--success);
+    border-color: var(--success);
+    color: white;
+}
+
+.step-label {
+    font-size: 0.875rem;
+    color: var(--text-secondary);
+    white-space: nowrap;
+}
+
+.progress-step.active .step-label {
+    color: var(--primary);
+    font-weight: 600;
+}
+
+.progress-line {
+    width: 100px;
+    height: 2px;
+    background: var(--border-color);
+    margin: 0 16px;
+}
+
+.signup-card {
+    max-width: 600px;
+    margin: 0 auto;
+    background: var(--background-primary);
+    border-radius: 16px;
+    box-shadow: 0 4px 24px rgba(0, 0, 0, 0.08);
+    padding: 48px;
+}
+
+.signup-card.wide {
+    max-width: 1200px;
+}
+
+.signup-header {
+    text-align: center;
+    margin-bottom: 40px;
+}
+
+.signup-header.centered {
+    text-align: center;
+}
+
+.signup-header h1 {
+    font-size: 2rem;
+    font-weight: 700;
+    margin-bottom: 12px;
+    color: var(--text-primary);
+}
+
+.signup-header p {
+    font-size: 1.125rem;
+    color: var(--text-secondary);
+}
+
+.signup-form {
+    display: flex;
+    flex-direction: column;
+    gap: 24px;
+}
+
+.form-row.two-col {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 16px;
+}
+
+.input-group {
+    display: flex;
+    align-items: stretch;
+}
+
+.input-group .form-control {
+    border-top-right-radius: 0;
+    border-bottom-right-radius: 0;
+    border-right: none;
+}
+
+.input-group-text {
+    background: var(--background-secondary);
+    border: 1px solid var(--border-color);
+    border-left: none;
+    padding: 0 16px;
+    display: flex;
+    align-items: center;
+    border-radius: 0 8px 8px 0;
+    color: var(--text-secondary);
+    font-size: 0.875rem;
+}
+
+.password-input {
+    position: relative;
+}
+
+.password-toggle {
+    position: absolute;
+    right: 12px;
+    top: 50%;
+    transform: translateY(-50%);
+    background: none;
+    border: none;
+    color: var(--text-secondary);
+    cursor: pointer;
+    padding: 8px;
+}
+
+.password-strength {
+    margin-top: 8px;
+    font-size: 0.875rem;
+}
+
+.billing-toggle {
+    display: flex;
+    gap: 8px;
+    justify-content: center;
+    margin-bottom: 40px;
+    background: var(--background-secondary);
+    padding: 4px;
+    border-radius: 12px;
+    width: fit-content;
+    margin-left: auto;
+    margin-right: auto;
+}
+
+.billing-option {
+    padding: 12px 24px;
+    border: none;
+    background: transparent;
+    border-radius: 8px;
+    font-weight: 600;
+    cursor: pointer;
+    transition: all 0.2s;
+    color: var(--text-secondary);
+}
+
+.billing-option.active {
+    background: var(--primary);
+    color: white;
+}
+
+.pricing-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(250px, 1fr));
+    gap: 24px;
+    margin-bottom: 40px;
+}
+
+.pricing-card {
+    background: var(--background-primary);
+    border: 2px solid var(--border-color);
+    border-radius: 16px;
+    padding: 32px;
+    cursor: pointer;
+    transition: all 0.3s ease;
+    position: relative;
+}
+
+.pricing-card:hover {
+    border-color: var(--primary);
+    transform: translateY(-4px);
+    box-shadow: 0 8px 24px rgba(37, 99, 235, 0.15);
+}
+
+.pricing-card.selected {
+    border-color: var(--primary);
+    box-shadow: 0 8px 24px rgba(37, 99, 235, 0.2);
+}
+
+.pricing-card.popular::before {
+    content: 'Most Popular';
+    position: absolute;
+    top: -12px;
+    left: 50%;
+    transform: translateX(-50%);
+    background: var(--primary);
+    color: white;
+    padding: 4px 16px;
+    border-radius: 20px;
+    font-size: 0.75rem;
+    font-weight: 600;
+}
+
+.plan-name {
+    font-size: 1.5rem;
+    font-weight: 700;
+    margin-bottom: 8px;
+}
+
+.plan-price {
+    font-size: 2.5rem;
+    font-weight: 700;
+    color: var(--primary);
+    margin-bottom: 4px;
+}
+
+.plan-price-small {
+    font-size: 1rem;
+    color: var(--text-secondary);
+}
+
+.plan-features {
+    list-style: none;
+    padding: 0;
+    margin: 24px 0;
+}
+
+.plan-features li {
+    padding: 8px 0;
+    display: flex;
+    align-items: center;
+    gap: 8px;
+}
+
+.plan-features i {
+    color: var(--success);
+}
+
+.payment-method-selector {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 16px;
+    margin-bottom: 24px;
+}
+
+.payment-method {
+    border: 2px solid var(--border-color);
+    border-radius: 12px;
+    padding: 20px;
+    cursor: pointer;
+    transition: all 0.2s;
+    display: block;
+}
+
+.payment-method:hover {
+    border-color: var(--primary);
+}
+
+.payment-method.active {
+    border-color: var(--primary);
+    background: rgba(37, 99, 235, 0.05);
+}
+
+.payment-method input[type="radio"] {
+    display: none;
+}
+
+.method-content {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    font-weight: 600;
+}
+
+.method-content i {
+    font-size: 1.5rem;
+    color: var(--primary);
+}
+
+.stripe-element {
+    background: var(--background-primary);
+    padding: 12px 16px;
+    border: 1px solid var(--border-color);
+    border-radius: 8px;
+    transition: all 0.2s;
+}
+
+.stripe-element:focus-within {
+    border-color: var(--primary);
+    box-shadow: 0 0 0 3px rgba(37, 99, 235, 0.1);
+}
+
+.selected-plan-summary {
+    background: var(--background-secondary);
+    padding: 24px;
+    border-radius: 12px;
+    margin-bottom: 32px;
+}
+
+.trial-notice {
+    background: rgba(34, 197, 94, 0.1);
+    border: 1px solid rgba(34, 197, 94, 0.3);
+    padding: 16px;
+    border-radius: 12px;
+    display: flex;
+    gap: 12px;
+    align-items: flex-start;
+}
+
+.trial-notice i {
+    color: var(--success);
+    font-size: 1.25rem;
+}
+
+.trial-notice strong {
+    display: block;
+    margin-bottom: 4px;
+}
+
+.trial-notice p {
+    margin: 0;
+    font-size: 0.875rem;
+    color: var(--text-secondary);
+}
+
+.signup-actions {
+    display: flex;
+    gap: 16px;
+    justify-content: space-between;
+    margin-top: 32px;
+}
+
+.signup-footer {
+    text-align: center;
+    margin-top: 32px;
+    padding-top: 24px;
+    border-top: 1px solid var(--border-color);
+    color: var(--text-secondary);
+}
+
+.signup-footer.centered {
+    text-align: center;
+}
+
+.success-icon {
+    width: 80px;
+    height: 80px;
+    border-radius: 50%;
+    background: rgba(34, 197, 94, 0.1);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    margin: 0 auto 24px;
+}
+
+.success-icon i {
+    font-size: 2.5rem;
+    color: var(--success);
+}
+
+.verification-instructions {
+    margin: 32px 0;
+}
+
+.instruction-step {
+    display: flex;
+    align-items: center;
+    gap: 16px;
+    padding: 16px;
+    margin-bottom: 12px;
+    background: var(--background-secondary);
+    border-radius: 12px;
+}
+
+.step-icon {
+    width: 40px;
+    height: 40px;
+    border-radius: 50%;
+    background: var(--primary);
+    color: white;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-weight: 700;
+    flex-shrink: 0;
+}
+
+.step-text {
+    font-size: 1rem;
+    color: var(--text-primary);
+}
+
+.resend-section {
+    text-align: center;
+    padding: 24px;
+    background: var(--background-secondary);
+    border-radius: 12px;
+    margin: 24px 0;
+}
+
+.resend-timer {
+    margin-top: 12px;
+    color: var(--text-secondary);
+    font-size: 0.875rem;
+}
+
+@media (max-width: 768px) {
+    .signup-card {
+        padding: 32px 24px;
+    }
+    
+    .progress-steps {
+        overflow-x: auto;
+        padding-bottom: 16px;
+    }
+    
+    .progress-line {
+        width: 60px;
+    }
+    
+    .step-label {
+        font-size: 0.75rem;
+    }
+    
+    .form-row.two-col {
+        grid-template-columns: 1fr;
+    }
+    
+    .pricing-grid {
+        grid-template-columns: 1fr;
+    }
+    
+    .payment-method-selector {
+        grid-template-columns: 1fr;
+    }
+}
+</style>
+
+<script src="https://js.stripe.com/v3/"></script>
+<script src="{% static 'js/signup.js' %}"></script>
+{% endblock %}

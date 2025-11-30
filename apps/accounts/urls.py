@@ -18,4 +18,11 @@ urlpatterns = [
     # Password reset
     path('password-reset/request/', views.request_password_reset, name='request_password_reset'),
     path('password-reset/confirm/', views.reset_password, name='reset_password'),
+    
+    # Tenant Signup Flow
+    path('signup/', views.signup_page, name='signup_page'),
+    path('check-domain/', views.check_domain_availability, name='check_domain'),
+    path('plans/', views.get_plans, name='get_plans'),
+    path('complete-signup/', views.complete_signup, name='complete_signup'),
+    path('resend-verification/', views.resend_verification_email, name='resend_verification'),
 ]

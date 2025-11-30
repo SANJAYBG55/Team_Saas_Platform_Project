@@ -150,3 +150,45 @@ class TaskUpdateSerializer(serializers.ModelSerializer):
             'assigned_to', 'start_date', 'due_date', 'tags',
             'estimated_hours', 'actual_hours', 'position'
         ]
+
+
+class TaskDetailSerializer(serializers.ModelSerializer):
+    """Detailed serializer for task with all relationships."""
+    
+    created_by_details = UserSerializer(source='created_by', read_only=True)
+    assigned_to_details = UserSerializer(source='assigned_to', read_only=True)
+    team_details = serializers.SerializerMethodField()
+    subtasks = serializers.SerializerMethodField()
+    comments = CommentSerializer(many=True, read_only=True)
+    attachments = AttachmentSerializer(many=True, read_only=True)
+    activities = TaskActivitySerializer(many=True, read_only=True)
+    progress = serializers.IntegerField(source='progress_percentage', read_only=True)
+    
+    class Meta:
+        model = Task
+        fields = [
+            'id', 'tenant', 'team', 'team_details', 'title', 'description',
+            'status', 'priority', 'created_by', 'created_by_details',
+            'assigned_to', 'assigned_to_details', 'start_date', 'due_date',
+            'completed_at', 'parent_task', 'subtasks', 'position',
+            'comments_count', 'attachments_count', 'subtasks_count',
+            'tags', 'estimated_hours', 'actual_hours', 'progress',
+            'is_overdue', 'comments', 'attachments', 'activities',
+            'created_at', 'updated_at'
+        ]
+        read_only_fields = fields
+    
+    def get_team_details(self, obj):
+        if obj.team:
+            return {
+                'id': obj.team.id,
+                'name': obj.team.name,
+                'slug': obj.team.slug
+            }
+        return None
+    
+    def get_subtasks(self, obj):
+        if obj.parent_task is None:
+            subtasks = obj.subtasks.all()
+            return TaskSerializer(subtasks, many=True, context=self.context).data
+        return []

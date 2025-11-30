@@ -63,7 +63,9 @@
     {% for team in teams %}
     <div class="team-card" data-team-id="{{ team.id }}">
         <div class="team-card-header">
-            <div class="team-avatar large">{{ team.name|slice:":1" }}</div>
+            <div class="team-avatar large" style="background: {{ team.color|default:'var(--primary-color)' }};">
+                {{ team.name|slice:":1" }}
+            </div>
             <div class="team-menu">
                 <button class="btn-icon" onclick="openTeamMenu(event, '{{ team.id }}')">
                     <svg width="16" height="16" fill="none" stroke="currentColor" stroke-width="2">
@@ -72,6 +74,49 @@
                         <circle cx="12" cy="19" r="1"/>
                     </svg>
                 </button>
+                <div class="dropdown-menu" id="teamMenu-{{ team.id }}" style="display: none;">
+                    <a href="/teams/{{ team.id }}/" class="dropdown-item">
+                        <svg width="16" height="16" fill="none" stroke="currentColor" stroke-width="2">
+                            <path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"/>
+                            <circle cx="12" cy="12" r="3"/>
+                        </svg>
+                        View Details
+                    </a>
+                    {% if team.owner.id == request.user.id %}
+                    <button class="dropdown-item" onclick="editTeam('{{ team.id }}')">
+                        <svg width="16" height="16" fill="none" stroke="currentColor" stroke-width="2">
+                            <path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"/>
+                            <path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"/>
+                        </svg>
+                        Edit Team
+                    </button>
+                    <button class="dropdown-item" onclick="inviteToTeam('{{ team.id }}')">
+                        <svg width="16" height="16" fill="none" stroke="currentColor" stroke-width="2">
+                            <path d="M16 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"/>
+                            <circle cx="8.5" cy="7" r="4"/>
+                            <path d="M20 8v6M23 11h-6"/>
+                        </svg>
+                        Invite Members
+                    </button>
+                    <div class="dropdown-divider"></div>
+                    <button class="dropdown-item text-error" onclick="deleteTeam('{{ team.id }}')">
+                        <svg width="16" height="16" fill="none" stroke="currentColor" stroke-width="2">
+                            <path d="M3 6h18M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"/>
+                        </svg>
+                        Delete Team
+                    </button>
+                    {% else %}
+                    <div class="dropdown-divider"></div>
+                    <button class="dropdown-item text-error" onclick="leaveTeam('{{ team.id }}')">
+                        <svg width="16" height="16" fill="none" stroke="currentColor" stroke-width="2">
+                            <path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4"/>
+                            <polyline points="16 17 21 12 16 7"/>
+                            <line x1="21" y1="12" x2="9" y2="12"/>
+                        </svg>
+                        Leave Team
+                    </button>
+                    {% endif %}
+                </div>
             </div>
         </div>
         
@@ -145,7 +190,7 @@
                 </svg>
             </button>
         </div>
-        <form id="createTeamForm" class="modal-body">
+        <form id="createTeamForm" class="modal-body" onsubmit="submitCreateTeam(event)">
             <div class="form-group">
                 <label class="form-label">Team Name *</label>
                 <input type="text" name="name" class="form-input" placeholder="e.g., Marketing Team" required>
@@ -178,47 +223,55 @@
                     <label for="color6" style="background: #ec4899;"></label>
                 </div>
             </div>
+
+            <div class="form-group">
+                <label class="form-label">Privacy</label>
+                <select name="is_private" class="form-input">
+                    <option value="false">Public - Anyone in organization can see</option>
+                    <option value="true">Private - Only invited members can access</option>
+                </select>
+            </div>
+
+            <div class="form-group">
+                <label class="form-label">Team Avatar (Optional)</label>
+                <input type="file" name="avatar" class="form-input" accept="image/*">
+                <small class="form-help">Recommended size: 256x256px</small>
+            </div>
         </form>
         <div class="modal-footer">
-            <button class="btn btn-secondary" onclick="closeModal('createTeamModal')">Cancel</button>
-            <button class="btn btn-primary" onclick="submitCreateTeam()">Create Team</button>
+            <button class="btn btn-secondary" onclick="window.SaaSPlatform.closeModal('createTeamModal')">Cancel</button>
+            <button class="btn btn-primary" onclick="document.getElementById('createTeamForm').requestSubmit()">Create Team</button>
         </div>
     </div>
 </div>
 
-<!-- Invite Member Modal -->
-<div class="modal" id="inviteMemberModal">
-    <div class="modal-overlay" onclick="closeModal('inviteMemberModal')"></div>
+<!-- Invite Members Modal -->
+<div class="modal" id="inviteMembersModal">
+    <div class="modal-overlay" onclick="window.SaaSPlatform.closeModal('inviteMembersModal')"></div>
     <div class="modal-content">
         <div class="modal-header">
-            <h2 class="modal-title">Invite Team Member</h2>
-            <button class="modal-close" onclick="closeModal('inviteMemberModal')">
+            <h2 class="modal-title">Invite Team Members</h2>
+            <button class="modal-close" onclick="window.SaaSPlatform.closeModal('inviteMembersModal')">
                 <svg width="20" height="20" fill="none" stroke="currentColor" stroke-width="2">
                     <path d="M18 6L6 18M6 6l12 12"/>
                 </svg>
             </button>
         </div>
-        <form id="inviteMemberForm" class="modal-body">
-            <div class="form-group">
-                <label class="form-label">Select Team *</label>
-                <select name="team_id" class="form-input" required>
-                    <option value="">Choose a team...</option>
-                    {% for team in my_owned_teams %}
-                    <option value="{{ team.id }}">{{ team.name }}</option>
-                    {% endfor %}
-                </select>
-            </div>
+        <form id="inviteMembersForm" class="modal-body" onsubmit="submitInviteMembers(event)">
+            <input type="hidden" name="team_id" id="inviteTeamId">
             
             <div class="form-group">
-                <label class="form-label">Email Address *</label>
-                <input type="email" name="email" class="form-input" placeholder="colleague@company.com" required>
+                <label class="form-label">Email Addresses *</label>
+                <textarea name="emails" class="form-input" rows="4" 
+                    placeholder="Enter email addresses (one per line)&#10;john@example.com&#10;jane@example.com" required></textarea>
+                <small class="form-help">Enter one email per line to invite multiple members at once</small>
             </div>
             
             <div class="form-group">
                 <label class="form-label">Role *</label>
                 <select name="role" class="form-input" required>
                     <option value="MEMBER">Member - Can view and create tasks</option>
-                    <option value="MANAGER">Manager - Can manage team and tasks</option>
+                    <option value="ADMIN">Admin - Can manage team and members</option>
                 </select>
             </div>
             
@@ -228,8 +281,8 @@
             </div>
         </form>
         <div class="modal-footer">
-            <button class="btn btn-secondary" onclick="closeModal('inviteMemberModal')">Cancel</button>
-            <button class="btn btn-primary" onclick="submitInviteMember()">Send Invitation</button>
+            <button class="btn btn-secondary" onclick="window.SaaSPlatform.closeModal('inviteMembersModal')">Cancel</button>
+            <button class="btn btn-primary" onclick="document.getElementById('inviteMembersForm').requestSubmit()">Send Invitations</button>
         </div>
     </div>
 </div>
@@ -509,57 +562,10 @@
 }
 </style>
 
+<script src="{% static 'js/teams.js' %}"></script>
 <script>
 function viewTeam(teamId) {
     window.location.href = `/teams/${teamId}/`;
-}
-
-function openTeamMenu(event, teamId) {
-    event.stopPropagation();
-    // Implement context menu
-    console.log('Open menu for team:', teamId);
-}
-
-async function submitCreateTeam() {
-    const form = document.getElementById('createTeamForm');
-    const formData = new FormData(form);
-    const data = Object.fromEntries(formData.entries());
-    
-    try {
-        const response = await window.SaaSPlatform.apiRequest('/api/teams/', {
-            method: 'POST',
-            body: JSON.stringify(data)
-        });
-        
-        if (response.id) {
-            window.SaaSPlatform.showToast('Team created successfully!', 'success');
-            closeModal('createTeamModal');
-            location.reload();
-        }
-    } catch (error) {
-        window.SaaSPlatform.showToast('Failed to create team', 'error');
-    }
-}
-
-async function submitInviteMember() {
-    const form = document.getElementById('inviteMemberForm');
-    const formData = new FormData(form);
-    const data = Object.fromEntries(formData.entries());
-    
-    try {
-        const response = await window.SaaSPlatform.apiRequest('/api/team-invitations/', {
-            method: 'POST',
-            body: JSON.stringify(data)
-        });
-        
-        if (response.id) {
-            window.SaaSPlatform.showToast('Invitation sent successfully!', 'success');
-            closeModal('inviteMemberModal');
-            form.reset();
-        }
-    } catch (error) {
-        window.SaaSPlatform.showToast('Failed to send invitation', 'error');
-    }
 }
 
 // View toggle
@@ -577,21 +583,6 @@ document.querySelectorAll('.view-btn').forEach(btn => {
         } else {
             container.classList.remove('list-view');
             container.classList.add('grid-view');
-        }
-    });
-});
-
-// Search functionality
-document.getElementById('searchTeams')?.addEventListener('input', function(e) {
-    const searchTerm = e.target.value.toLowerCase();
-    document.querySelectorAll('.team-card').forEach(card => {
-        const teamName = card.querySelector('.team-name').textContent.toLowerCase();
-        const teamDesc = card.querySelector('.team-description')?.textContent.toLowerCase() || '';
-        
-        if (teamName.includes(searchTerm) || teamDesc.includes(searchTerm)) {
-            card.style.display = '';
-        } else {
-            card.style.display = 'none';
         }
     });
 });

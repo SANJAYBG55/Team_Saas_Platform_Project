@@ -422,6 +422,300 @@ def export_tenants(request):
 
 
 @login_required
+@user_passes_test(is_internal_admin)
+def payment_verification(request):
+    """
+    Payment verification page showing all payment submissions for review.
+    """
+    from apps.subscriptions.models import Payment
+    from datetime import date
+    
+    # Get filter parameters
+    search_query = request.GET.get('search', '')
+    status_filter = request.GET.get('status', '')
+    method_filter = request.GET.get('method', '')
+    page_number = request.GET.get('page', 1)
+    
+    # Base queryset
+    payments = Payment.objects.select_related('tenant', 'subscription').all()
+    
+    # Apply filters
+    if search_query:
+        payments = payments.filter(
+            Q(tenant__name__icontains=search_query) |
+            Q(tenant__company_email__icontains=search_query) |
+            Q(transaction_id__icontains=search_query)
+        )
+    
+    if status_filter:
+        payments = payments.filter(verification_status=status_filter.upper())
+    
+    if method_filter:
+        payments = payments.filter(payment_method=method_filter.upper())
+    
+    # Order by created date (newest first)
+    payments = payments.order_by('-created_at')
+    
+    # Pagination
+    paginator = Paginator(payments, 15)  # 15 payments per page
+    page_obj = paginator.get_page(page_number)
+    
+    # Calculate summary stats
+    pending_payments = Payment.objects.filter(verification_status='PENDING').count()
+    
+    today = date.today()
+    approved_today = Payment.objects.filter(
+        verification_status='APPROVED',
+        verified_at__date=today
+    ).count()
+    
+    rejected_today = Payment.objects.filter(
+        verification_status='REJECTED',
+        verified_at__date=today
+    ).count()
+    
+    # Week stats
+    week_start = timezone.now() - timedelta(days=7)
+    approved_this_week = Payment.objects.filter(
+        verification_status='APPROVED',
+        verified_at__gte=week_start
+    ).count()
+    
+    rejected_this_week = Payment.objects.filter(
+        verification_status='REJECTED',
+        verified_at__gte=week_start
+    ).count()
+    
+    # Total pending amount
+    from django.db.models import Sum
+    total_pending_amount = Payment.objects.filter(
+        verification_status='PENDING'
+    ).aggregate(total=Sum('amount'))['total'] or 0
+    
+    context = {
+        'payments': page_obj,
+        'page_obj': page_obj,
+        'pending_payments': pending_payments,
+        'approved_today': approved_today,
+        'rejected_today': rejected_today,
+        'approved_this_week': approved_this_week,
+        'rejected_this_week': rejected_this_week,
+        'total_pending_amount': total_pending_amount,
+        # Filters for form state
+        'search_query': search_query,
+        'status_filter': status_filter,
+        'method_filter': method_filter,
+    }
+    
+    return render(request, 'admin_panel/payment_verification.html', context)
+
+
+@login_required
+@user_passes_test(is_internal_admin)
+@require_http_methods(["GET"])
+def payment_detail(request, payment_id):
+    """
+    Get payment details as JSON.
+    """
+    from apps.subscriptions.models import Payment
+    
+    payment = get_object_or_404(Payment, id=payment_id)
+    
+    data = {
+        'success': True,
+        'payment': {
+            'id': payment.id,
+            'amount': str(payment.amount),
+            'currency': payment.currency,
+            'payment_method': payment.get_payment_method_display(),
+            'transaction_id': payment.transaction_id,
+            'verification_status': payment.verification_status,
+            'description': payment.description,
+            'notes': payment.notes,
+            'payment_proof': payment.payment_proof.url if payment.payment_proof else None,
+            'created_at': payment.created_at.isoformat(),
+            'paid_at': payment.paid_at.isoformat() if payment.paid_at else None,
+            'verified_at': payment.verified_at.isoformat() if payment.verified_at else None,
+            'verified_by_name': payment.verified_by.get_full_name() if payment.verified_by else None,
+            'verification_notes': payment.verification_notes,
+            'tenant': {
+                'id': payment.tenant.id,
+                'name': payment.tenant.name,
+                'slug': payment.tenant.slug,
+                'company_email': payment.tenant.company_email,
+            },
+            'subscription': {
+                'id': payment.subscription.id,
+                'plan_name': payment.subscription.plan.name,
+            } if payment.subscription else None,
+        }
+    }
+    
+    return JsonResponse(data)
+
+
+@login_required
+@user_passes_test(is_internal_admin)
+@require_http_methods(["POST"])
+def approve_payment(request, payment_id):
+    """
+    Approve a payment verification.
+    """
+    import json
+    from apps.subscriptions.models import Payment
+    
+    payment = get_object_or_404(Payment, id=payment_id)
+    
+    if payment.verification_status != 'PENDING':
+        return JsonResponse({
+            'success': False,
+            'message': 'Payment is not in pending status'
+        }, status=400)
+    
+    try:
+        data = json.loads(request.body)
+        notes = data.get('notes', '')
+        
+        # Approve payment
+        payment.approve_verification(request.user, notes)
+        
+        # Also approve tenant if still pending
+        if payment.tenant.status == 'PENDING':
+            payment.tenant.status = 'ACTIVE'
+            payment.tenant.is_approved = True
+            payment.tenant.approved_at = timezone.now()
+            payment.tenant.approved_by = request.user
+            payment.tenant.save()
+        
+        # Activate subscription
+        if payment.subscription and payment.subscription.status != 'ACTIVE':
+            payment.subscription.status = 'ACTIVE'
+            payment.subscription.save()
+        
+        # TODO: Send email notification to tenant
+        
+        return JsonResponse({
+            'success': True,
+            'message': 'Payment approved successfully'
+        })
+        
+    except json.JSONDecodeError:
+        return JsonResponse({
+            'success': False,
+            'message': 'Invalid JSON data'
+        }, status=400)
+    except Exception as e:
+        return JsonResponse({
+            'success': False,
+            'message': str(e)
+        }, status=500)
+
+
+@login_required
+@user_passes_test(is_internal_admin)
+@require_http_methods(["POST"])
+def reject_payment(request, payment_id):
+    """
+    Reject a payment verification.
+    """
+    import json
+    from apps.subscriptions.models import Payment
+    
+    payment = get_object_or_404(Payment, id=payment_id)
+    
+    if payment.verification_status != 'PENDING':
+        return JsonResponse({
+            'success': False,
+            'message': 'Payment is not in pending status'
+        }, status=400)
+    
+    try:
+        data = json.loads(request.body)
+        notes = data.get('notes', '')
+        
+        if not notes:
+            return JsonResponse({
+                'success': False,
+                'message': 'Rejection reason is required'
+            }, status=400)
+        
+        # Reject payment
+        payment.reject_verification(request.user, notes)
+        
+        # TODO: Send email notification to tenant with rejection reason
+        
+        return JsonResponse({
+            'success': True,
+            'message': 'Payment rejected'
+        })
+        
+    except json.JSONDecodeError:
+        return JsonResponse({
+            'success': False,
+            'message': 'Invalid JSON data'
+        }, status=400)
+    except Exception as e:
+        return JsonResponse({
+            'success': False,
+            'message': str(e)
+        }, status=500)
+
+
+@login_required
+@user_passes_test(is_internal_admin)
+def export_payments(request):
+    """
+    Export payments to CSV based on current filters.
+    """
+    from apps.subscriptions.models import Payment
+    
+    # Get filter parameters
+    search_query = request.GET.get('search', '')
+    status_filter = request.GET.get('status', '')
+    method_filter = request.GET.get('method', '')
+    
+    # Base queryset
+    payments = Payment.objects.select_related('tenant', 'subscription').all()
+    
+    # Apply filters
+    if search_query:
+        payments = payments.filter(
+            Q(tenant__name__icontains=search_query) |
+            Q(tenant__company_email__icontains=search_query) |
+            Q(transaction_id__icontains=search_query)
+        )
+    
+    if status_filter:
+        payments = payments.filter(verification_status=status_filter.upper())
+    
+    if method_filter:
+        payments = payments.filter(payment_method=method_filter.upper())
+    
+    # Create CSV response
+    response = HttpResponse(content_type='text/csv')
+    response['Content-Disposition'] = f'attachment; filename="payments_{timezone.now().strftime("%Y%m%d_%H%M%S")}.csv"'
+    
+    writer = csv.writer(response)
+    writer.writerow(['ID', 'Tenant', 'Amount', 'Currency', 'Method', 'Transaction ID', 'Status', 'Submitted', 'Verified', 'Verified By'])
+    
+    for payment in payments:
+        writer.writerow([
+            payment.id,
+            payment.tenant.name,
+            str(payment.amount),
+            payment.currency,
+            payment.get_payment_method_display(),
+            payment.transaction_id or 'N/A',
+            payment.verification_status,
+            payment.created_at.strftime('%Y-%m-%d %H:%M:%S'),
+            payment.verified_at.strftime('%Y-%m-%d %H:%M:%S') if payment.verified_at else 'N/A',
+            payment.verified_by.get_full_name() if payment.verified_by else 'N/A'
+        ])
+    
+    return response
+
+
+@login_required
 def access_denied(request):
     """
     Access denied page for non-admin users trying to access admin panel.

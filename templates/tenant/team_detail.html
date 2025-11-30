@@ -280,7 +280,7 @@
         </div>
         <div class="members-list">
             {% for member in team.members.all %}
-            <div class="member-row">
+            <div class="member-row" data-member-id="{{ member.id }}">
                 <div class="member-info">
                     <div class="avatar" style="background: {{ member.user.color|default:'var(--primary-color)' }};">
                         {{ member.user.get_initials }}
@@ -347,7 +347,7 @@
                 <h3>Delete Team</h3>
                 <p>Permanently delete this team and all associated tasks. This action cannot be undone.</p>
             </div>
-            <button class="btn btn-danger" onclick="deleteTeam()">Delete Team</button>
+            <button class="btn btn-danger" onclick="deleteTeam('{{ team.id }}')">Delete Team</button>
         </div>
     </div>
     {% else %}
@@ -612,6 +612,7 @@
 }
 </style>
 
+<script src="{% static 'js/team-detail.js' %}"></script>
 <script>
 function switchTab(tabName) {
     document.querySelectorAll('.tab').forEach(t => t.classList.remove('active'));
@@ -627,42 +628,10 @@ document.querySelectorAll('.tab').forEach(tab => {
     });
 });
 
-function viewTask(taskId) {
-    window.location.href = `/tasks/${taskId}/`;
-}
-
-async function removeMember(memberId) {
-    if (!confirm('Remove this member from the team?')) return;
-    
-    try {
-        await window.SaaSPlatform.apiRequest(`/api/team-members/${memberId}/`, {
-            method: 'DELETE'
-        });
-        window.SaaSPlatform.showToast('Member removed', 'success');
-        location.reload();
-    } catch (error) {
-        window.SaaSPlatform.showToast('Failed to remove member', 'error');
-    }
-}
-
-async function deleteTeam() {
-    const teamName = '{{ team.name }}';
-    const confirmation = prompt(`Type "${teamName}" to confirm deletion:`);
-    
-    if (confirmation !== teamName) {
-        window.SaaSPlatform.showToast('Team name does not match', 'error');
-        return;
-    }
-    
-    try {
-        await window.SaaSPlatform.apiRequest('/api/teams/{{ team.id }}/', {
-            method: 'DELETE'
-        });
-        window.SaaSPlatform.showToast('Team deleted', 'success');
-        window.location.href = '/teams/';
-    } catch (error) {
-        window.SaaSPlatform.showToast('Failed to delete team', 'error');
-    }
+// Initialize team settings form handler
+const settingsForm = document.getElementById('teamSettingsForm');
+if (settingsForm) {
+    settingsForm.addEventListener('submit', (e) => submitTeamSettings(e, '{{ team.id }}'));
 }
 </script>
 {% endblock %}

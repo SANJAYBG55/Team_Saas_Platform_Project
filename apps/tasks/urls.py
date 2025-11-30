@@ -1,15 +1,22 @@
 """
-URL configuration for tasks app API.
+URL configuration for tasks app - both template views and API.
 """
 from django.urls import path, include
 from rest_framework.routers import DefaultRouter
+from . import views
 
-# Placeholder for tasks views - to be completed
+# API Router
 router = DefaultRouter()
-# router.register(r'', views.TaskViewSet, basename='task')
-# router.register(r'comments', views.CommentViewSet, basename='comment')
-# router.register(r'attachments', views.AttachmentViewSet, basename='attachment')
+router.register(r'api', views.TaskViewSet, basename='task')
+router.register(r'api/comments', views.CommentViewSet, basename='comment')
+router.register(r'api/attachments', views.AttachmentViewSet, basename='attachment')
 
+# URL Patterns
 urlpatterns = [
+    # Template views
+    path('', views.tasks_list, name='tasks-list'),
+    path('<int:task_id>/', views.task_detail, name='task-detail'),
+    
+    # API routes
     path('', include(router.urls)),
 ]
