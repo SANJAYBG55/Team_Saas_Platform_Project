@@ -28,14 +28,18 @@ def register_view(request):
 def password_reset_view(request):
     """Render the password reset request page."""
     if request.user.is_authenticated:
-        return redirect('landing')
+        if request.user.is_super_admin:
+            return redirect('admin_dashboard')
+        return redirect('tenant_dashboard')
     return render(request, 'auth/password_reset.html')
 
 
 def password_reset_confirm_view(request, token=None):
     """Render the password reset confirmation page."""
     if request.user.is_authenticated:
-        return redirect('landing')
+        if request.user.is_super_admin:
+            return redirect('admin_dashboard')
+        return redirect('tenant_dashboard')
     return render(request, 'auth/password_reset_confirm.html', {'token': token})
 
 
